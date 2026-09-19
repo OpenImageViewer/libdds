@@ -54,6 +54,15 @@ This avoids allocating and initializing a whole-image result only to copy it aga
 Conversion can still allocate temporary scanlines. These storage savings require callers
 to adopt the new APIs. Existing allocating overloads remain available.
 
+#### Resolve setup once, then process pixels
+
+After removing avoidable storage work, repeated format handling becomes another
+source of cost. The *prepared scanline conversion* commit resolves format metadata
+and transfer flags once per image in CPU conversion and BC encoding/decoding.
+[Scanline processing](DirectXTex/DirectXTexConvert.cpp#L3154) reuses that state and
+skips conversion arithmetic when numeric and channel semantics already match and
+no transfer-function change remains.
+
 ### License
 
 [MIT license](LICENSE). Bundled dependency licenses remain in their directories.

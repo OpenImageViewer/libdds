@@ -132,6 +132,90 @@ namespace
             Record(decoded);
         }
     }
+    void NativeBCOutput()
+    {
+        // Random endpoint/index blocks exercise packing thresholds and all BC7 modes.
+        // Both transfer-function matches and mismatches are recorded for comparison
+        // with the unmodified upstream executable, including partial edge blocks.
+        constexpr DXGI_FORMAT formats[]{DXGI_FORMAT_BC1_TYPELESS, DXGI_FORMAT_BC1_UNORM, DXGI_FORMAT_BC1_UNORM_SRGB,
+                                        DXGI_FORMAT_BC2_TYPELESS, DXGI_FORMAT_BC2_UNORM, DXGI_FORMAT_BC2_UNORM_SRGB,
+                                        DXGI_FORMAT_BC3_TYPELESS, DXGI_FORMAT_BC3_UNORM, DXGI_FORMAT_BC3_UNORM_SRGB,
+                                        DXGI_FORMAT_BC7_TYPELESS, DXGI_FORMAT_BC7_UNORM, DXGI_FORMAT_BC7_UNORM_SRGB};
+        uint32_t seed = 0x71f03295;
+        for (const auto format : formats)
+        {
+            for (const auto size : {std::pair<size_t, size_t>{1, 1}, {2, 3}, {4, 4}, {5, 7}, {31, 17}, {64, 32}})
+            {
+                ScratchImage source;
+                CHECK(SUCCEEDED(source.Initialize2D(format, size.first, size.second, 1, 1)));
+                for (size_t i = 0; i < source.GetPixelsSize(); ++i)
+                {
+                    seed ^= seed << 13;
+                    seed ^= seed >> 17;
+                    seed ^= seed << 5;
+                    source.GetPixels()[i] = static_cast<uint8_t>(seed);
+                }
+                if (format >= DXGI_FORMAT_BC7_TYPELESS && format <= DXGI_FORMAT_BC7_UNORM_SRGB)
+                {
+                    for (size_t offset = 0; offset < source.GetPixelsSize(); offset += 16)
+                    {
+                        const unsigned mode        = static_cast<unsigned>((offset / 16) % 8);
+                        source.GetPixels()[offset] = static_cast<uint8_t>(
+                            (source.GetPixels()[offset] & (0xffu << (mode + 1))) | (1u << mode));
+                    }
+                }
+                for (const auto output : {DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB})
+                {
+                    ScratchImage decoded;
+                    CHECK(SUCCEEDED(Decompress(*source.GetImage(0, 0, 0), output, decoded)));
+                    Record(decoded);
+#ifndef LIBDDS_REFERENCE
+                    // Exercise the fast path with row padding and guard bytes too.
+                    const size_t rowPitch   = size.first * 4 + 12;
+                    const size_t slicePitch = rowPitch * size.second;
+                    std::vector<uint8_t> memory(slicePitch + 32, 0xa5);
+                    const Image destination{size.first, size.second, output, rowPitch, slicePitch, memory.data() + 16};
+                    CHECK(SUCCEEDED(Decompress(*source.GetImage(0, 0, 0), destination)));
+                    for (size_t row = 0; row < size.second; ++row)
+                    {
+                        CHECK(std::memcmp(destination.pixels + row * rowPitch,
+                                          decoded.GetPixels() + row * decoded.GetImages()[0].rowPitch,
+                                          size.first * 4) == 0);
+                        CHECK(std::all_of(destination.pixels + row * rowPitch + size.first * 4,
+                                          destination.pixels + (row + 1) * rowPitch,
+                                          [](uint8_t byte) { return byte == 0xa5; }));
+                    }
+                    CHECK(std::all_of(memory.begin(), memory.begin() + 16, [](uint8_t byte) { return byte == 0xa5; }));
+                    CHECK(std::all_of(memory.end() - 16, memory.end(), [](uint8_t byte) { return byte == 0xa5; }));
+#endif
+                }
+            }
+        }
+    }
+
+    void BCOutputConversions()
+    {
+        const DXGI_FORMAT formats[]{DXGI_FORMAT_BC1_UNORM, DXGI_FORMAT_BC1_UNORM_SRGB, DXGI_FORMAT_BC2_UNORM,
+                                    DXGI_FORMAT_BC3_UNORM, DXGI_FORMAT_BC4_UNORM,      DXGI_FORMAT_BC4_SNORM,
+                                    DXGI_FORMAT_BC5_UNORM, DXGI_FORMAT_BC5_SNORM,      DXGI_FORMAT_BC6H_UF16,
+                                    DXGI_FORMAT_BC6H_SF16, DXGI_FORMAT_BC7_UNORM,      DXGI_FORMAT_BC7_UNORM_SRGB};
+        for (const auto format : formats)
+        {
+            auto source = ColorImage(5, 7, -.25f, .37f, 1.5f, .5f);
+            ScratchImage compressed;
+            CHECK(SUCCEEDED(Compress(*source.GetImages(), format, TEX_COMPRESS_BC7_QUICK, .5f, compressed)));
+            for (const auto output :
+                 {DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_R8G8_UNORM, DXGI_FORMAT_R8_SNORM, DXGI_FORMAT_A8_UNORM,
+                  DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
+                  DXGI_FORMAT_R32G32B32_FLOAT, DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_R16G16B16A16_UNORM})
+            {
+                ScratchImage decoded;
+                CHECK(SUCCEEDED(Decompress(*compressed.GetImages(), output, decoded)));
+                CHECK(decoded.GetMetadata().width == 5 && decoded.GetMetadata().height == 7);
+                Record(decoded);
+            }
+        }
+    }
 
     void BC45EndpointPairs()
     {
@@ -738,6 +822,8 @@ int main(int argc, char** argv)
         }
         KnownBlocks();
         BCFormats();
+        NativeBCOutput();
+        BCOutputConversions();
         BC45EndpointPairs();
         Containers();
         UpstreamValidation();

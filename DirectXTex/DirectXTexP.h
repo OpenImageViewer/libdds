@@ -395,6 +395,24 @@ namespace DirectX
 
         HRESULT __cdecl ConvertFromR16G16B16A16(_In_ const Image& srcImage, _In_ const Image& destImage) noexcept;
 
+        // libdds: format metadata and transfer functions are constant for an image.
+        // Keep the prepared state private; existing scanline callers retain their API.
+        struct ConvertData;
+        struct ScanlineConversion
+        {
+            const ConvertData* source;
+            const ConvertData* destination;
+            TEX_FILTER_FLAGS flags;
+            bool identity;
+        };
+
+        ScanlineConversion __cdecl PrepareScanlineConversion(
+            DXGI_FORMAT outFormat, DXGI_FORMAT inFormat, TEX_FILTER_FLAGS flags) noexcept;
+
+        void __cdecl ConvertScanline(
+            _Inout_updates_all_(count) XMVECTOR* pBuffer, _In_ size_t count,
+            _In_ const ScanlineConversion& conversion) noexcept;
+
         void __cdecl ConvertScanline(
             _Inout_updates_all_(count) XMVECTOR* pBuffer, _In_ size_t count,
             _In_ DXGI_FORMAT outFormat, _In_ DXGI_FORMAT inFormat, _In_ TEX_FILTER_FLAGS flags) noexcept;

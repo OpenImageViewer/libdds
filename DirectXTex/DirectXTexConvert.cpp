@@ -2959,15 +2959,15 @@ bool DirectX::Internal::LoadScanlineLinear(
 //-------------------------------------------------------------------------------------
 // Convert scanline based on source/target formats
 //-------------------------------------------------------------------------------------
+struct DirectX::Internal::ConvertData
+{
+    DXGI_FORMAT format;
+    size_t      datasize;
+    uint32_t    flags;
+};
+
 namespace
 {
-    struct ConvertData
-    {
-        DXGI_FORMAT format;
-        size_t      datasize;
-        uint32_t    flags;
-    };
-
     const ConvertData g_ConvertTable[] =
     {
         { DXGI_FORMAT_R32G32B32A32_FLOAT,           32, CONVF_FLOAT | CONVF_R | CONVF_G | CONVF_B | CONVF_A },
@@ -3087,20 +3087,11 @@ uint32_t DirectX::Internal::GetConvertFlags(DXGI_FORMAT format) noexcept
     return (in) ? in->flags : 0;
 }
 
-_Use_decl_annotations_
-void DirectX::Internal::ConvertScanline(
-    XMVECTOR* pBuffer,
-    size_t count,
-    DXGI_FORMAT outFormat,
-    DXGI_FORMAT inFormat,
-    TEX_FILTER_FLAGS flags) noexcept
+ScanlineConversion DirectX::Internal::PrepareScanlineConversion(
+    DXGI_FORMAT outFormat, DXGI_FORMAT inFormat, TEX_FILTER_FLAGS flags) noexcept
 {
-    assert(pBuffer && count > 0 && ((reinterpret_cast<uintptr_t>(pBuffer) & 0xF) == 0));
     assert(IsValid(outFormat) && !IsTypeless(outFormat) && !IsPlanar(outFormat) && !IsPalettized(outFormat));
     assert(IsValid(inFormat) && !IsTypeless(inFormat) && !IsPlanar(inFormat) && !IsPalettized(inFormat));
-
-    if (!pBuffer)
-        return;
 
 #ifdef _DEBUG
     // Ensure conversion table is in ascending order
@@ -3123,7 +3114,7 @@ void DirectX::Internal::ConvertScanline(
     if (!in || !out)
     {
         assert(false);
-        return;
+        return { nullptr, nullptr, flags, true };
     }
 
     assert(GetConvertFlags(inFormat) == in->flags);
@@ -3176,6 +3167,39 @@ void DirectX::Internal::ConvertScanline(
     {
         flags &= ~(TEX_FILTER_SRGB_IN | TEX_FILTER_SRGB_OUT);
     }
+
+    // Packing/layout markers are handled by the load/store functions. Matching
+    // numeric and channel semantics need no work when no transfer conversion remains.
+    constexpr uint32_t semanticFlags = CONVF_FLOAT | CONVF_UNORM | CONVF_UINT
+        | CONVF_SNORM | CONVF_SINT | CONVF_DEPTH | CONVF_STENCIL | CONVF_POS_ONLY | CONVF_RGBA_MASK;
+    const bool identity = ((in->flags ^ out->flags) & semanticFlags) == 0
+        && !(flags & (TEX_FILTER_SRGB_IN | TEX_FILTER_SRGB_OUT));
+    return { in, out, flags, identity };
+}
+
+_Use_decl_annotations_
+void DirectX::Internal::ConvertScanline(
+    XMVECTOR* pBuffer, size_t count, DXGI_FORMAT outFormat, DXGI_FORMAT inFormat,
+    TEX_FILTER_FLAGS flags) noexcept
+{
+    assert(pBuffer && count > 0 && ((reinterpret_cast<uintptr_t>(pBuffer) & 0xF) == 0));
+    if (!pBuffer)
+        return;
+    const auto conversion = PrepareScanlineConversion(outFormat, inFormat, flags);
+    ConvertScanline(pBuffer, count, conversion);
+}
+
+_Use_decl_annotations_
+void DirectX::Internal::ConvertScanline(
+    XMVECTOR* pBuffer, size_t count, const ScanlineConversion& conversion) noexcept
+{
+    assert(pBuffer && count > 0 && ((reinterpret_cast<uintptr_t>(pBuffer) & 0xF) == 0));
+    if (!pBuffer || conversion.identity)
+        return;
+
+    const auto* in = conversion.source;
+    const auto* out = conversion.destination;
+    const auto flags = conversion.flags;
 
     // sRGB input processing (sRGB -> Linear RGB)
     if (flags & TEX_FILTER_SRGB_IN)
@@ -4828,6 +4852,7 @@ namespace
         if (!pSrc || !pDest)
             return E_POINTER;
 
+        const auto conversion = PrepareScanlineConversion(destImage.format, srcImage.format, filter);
         size_t width = srcImage.width;
 
         if (filter & TEX_FILTER_DITHER_DIFFUSION)
@@ -4853,7 +4878,7 @@ namespace
                 if (!LoadScanline(scanline.get(), width, pSrc, srcImage.rowPitch, srcImage.format))
                     return E_FAIL;
 
-                ConvertScanline(scanline.get(), width, destImage.format, srcImage.format, filter);
+                ConvertScanline(scanline.get(), width, conversion);
 
                 if (!StoreScanlineDither(pDest, destImage.rowPitch, destImage.format, scanline.get(), width, threshold, h, z, pDiffusionErrors))
                     return E_FAIL;
@@ -4884,7 +4909,7 @@ namespace
                     if (!LoadScanline(scanline.get(), width, pSrc, srcImage.rowPitch, srcImage.format))
                         return E_FAIL;
 
-                    ConvertScanline(scanline.get(), width, destImage.format, srcImage.format, filter);
+                    ConvertScanline(scanline.get(), width, conversion);
 
                     if (!StoreScanlineDither(pDest, destImage.rowPitch, destImage.format, scanline.get(), width, threshold, h, z, nullptr))
                         return E_FAIL;
@@ -4909,7 +4934,7 @@ namespace
                     if (!LoadScanline(scanline.get(), width, pSrc, srcImage.rowPitch, srcImage.format))
                         return E_FAIL;
 
-                    ConvertScanline(scanline.get(), width, destImage.format, srcImage.format, filter);
+                    ConvertScanline(scanline.get(), width, conversion);
 
                     if (!StoreScanline(pDest, destImage.rowPitch, destImage.format, scanline.get(), width, threshold))
                         return E_FAIL;

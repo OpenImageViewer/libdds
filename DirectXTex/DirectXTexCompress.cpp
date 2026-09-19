@@ -106,6 +106,8 @@ namespace
         if (!DetermineEncoderSettings(result.format, pfEncode, blocksize, cflags))
             return HRESULT_E_NOT_SUPPORTED;
 
+        const auto conversion = PrepareScanlineConversion(result.format, format, cflags | srgb);
+
         XM_ALIGNED_DATA(16) XMVECTOR temp[16];
         const uint8_t *pSrc = image.pixels;
         const uint8_t *pEnd = image.pixels + image.slicePitch;
@@ -186,7 +188,7 @@ namespace
                     }
                 }
 
-                ConvertScanline(temp, 16, result.format, format, cflags | srgb);
+                ConvertScanline(temp, 16, conversion);
 
                 if (pfEncode)
                     pfEncode(dptr, temp, bcflags);
@@ -243,6 +245,8 @@ namespace
         TEX_FILTER_FLAGS cflags;
         if (!DetermineEncoderSettings(result.format, pfEncode, blocksize, cflags))
             return HRESULT_E_NOT_SUPPORTED;
+
+        const auto conversion = PrepareScanlineConversion(result.format, format, cflags | srgb);
 
         // Refactored version of loop to support parallel independance
         const size_t nBlocks = std::max<size_t>(1, (image.width + 3) / 4) * std::max<size_t>(1, (image.height + 3) / 4);
@@ -340,7 +344,7 @@ namespace
                 }
             }
 
-            ConvertScanline(temp, 16, result.format, format, cflags | srgb);
+            ConvertScanline(temp, 16, conversion);
 
             if (pfEncode)
                 pfEncode(pDest, temp, bcflags);
@@ -485,6 +489,8 @@ namespace
             return HRESULT_E_NOT_SUPPORTED;
         }
 
+        const auto conversion = PrepareScanlineConversion(format, cformat, TEX_FILTER_DEFAULT);
+
         XM_ALIGNED_DATA(16) XMVECTOR temp[16];
         const uint8_t *pSrc = cImage.pixels;
         const size_t rowPitch = result.rowPitch;
@@ -497,7 +503,8 @@ namespace
             for (size_t count = 0; (count < cImage.rowPitch) && (w < cImage.width); count += sbpp, w += 4)
             {
                 pfDecode(temp, sptr);
-                ConvertScanline(temp, 16, format, cformat, TEX_FILTER_DEFAULT);
+                if (!conversion.identity)
+                    ConvertScanline(temp, 16, conversion);
 
                 const size_t pw = std::min<size_t>(4, cImage.width - w);
                 assert(pw > 0 && ph > 0);

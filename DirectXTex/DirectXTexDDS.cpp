@@ -686,6 +686,18 @@ namespace
         return S_OK;
     }
 
+    // libdds: packed output reads four source bytes per pixel. Validate the last
+    // accessed row and the file writer's metadata-sized temporary before copying.
+    bool Valid24bppSource(const Image& image, size_t maxWidth) noexcept
+    {
+        if (!image.width || !image.height || image.width > maxWidth || image.width > SIZE_MAX / 4)
+            return false;
+
+        const size_t sourceBytes = image.width * 4;
+        return image.rowPitch >= sourceBytes && image.slicePitch >= sourceBytes
+            && (image.height - 1 <= (image.slicePitch - sourceBytes) / image.rowPitch);
+    }
+
     inline void CopyScanline24bpp(
         _Out_writes_bytes_(width * 3) uint8_t* pDestination,
         _In_reads_bytes_(width * 4) const uint8_t* pSource,
@@ -2417,9 +2429,11 @@ HRESULT DirectX::SaveToDDSMemory(
         return hr;
 
     bool fastpath = true;
-    const bool use24bpp = ((metadata.format == DXGI_FORMAT_B8G8R8X8_UNORM)
+    // libdds: EncodeDDSHeader can select DX10 implicitly for texture arrays.
+    // Match its actual header choice so the pixel payload uses the same bit depth.
+    const bool use24bpp = (metadata.format == DXGI_FORMAT_B8G8R8X8_UNORM)
         && (flags & DDS_FLAGS_FORCE_24BPP_RGB)
-        && !(flags & (DDS_FLAGS_FORCE_DX10_EXT | DDS_FLAGS_FORCE_DX10_EXT_MISC2))) != 0;
+        && (required == DDS_MIN_HEADER_SIZE);
 
     for (size_t i = 0; i < nimages; ++i)
     {
@@ -2428,6 +2442,9 @@ HRESULT DirectX::SaveToDDSMemory(
 
         if (images[i].format != metadata.format)
             return E_FAIL;
+
+        if (use24bpp && !Valid24bppSource(images[i], metadata.width))
+            return E_INVALIDARG;
 
         size_t ddsRowPitch, ddsSlicePitch;
         hr = ComputePitch(metadata.format,
@@ -2510,7 +2527,6 @@ HRESULT DirectX::SaveToDDSMemory(
                         }
 
                         const size_t rowPitch = images[index].rowPitch;
-                        const uint8_t * __restrict sPtr = images[index].pixels;
                         uint8_t * __restrict dPtr = pDestination;
 
                         const size_t csize = std::min<size_t>(metadata.width * 3, ddsRowPitch);
@@ -2523,9 +2539,8 @@ HRESULT DirectX::SaveToDDSMemory(
                                 return E_FAIL;
                             }
 
-                            CopyScanline24bpp(dPtr, sPtr, images[index].width);
+                            CopyScanline24bpp(dPtr, images[index].pixels + j * rowPitch, images[index].width);
 
-                            sPtr += rowPitch;
                             dPtr += ddsRowPitch;
                             tremaining -= ddsRowPitch;
                         }
@@ -2616,7 +2631,6 @@ HRESULT DirectX::SaveToDDSMemory(
                         }
 
                         const size_t rowPitch = images[index].rowPitch;
-                        const uint8_t * __restrict sPtr = images[index].pixels;
                         uint8_t * __restrict dPtr = pDestination;
 
                         const size_t csize = std::min<size_t>(metadata.width * 3, ddsRowPitch);
@@ -2629,9 +2643,8 @@ HRESULT DirectX::SaveToDDSMemory(
                                 return E_FAIL;
                             }
 
-                            CopyScanline24bpp(dPtr, sPtr, images[index].width);
+                            CopyScanline24bpp(dPtr, images[index].pixels + j * rowPitch, images[index].width);
 
-                            sPtr += rowPitch;
                             dPtr += ddsRowPitch;
                             tremaining -= ddsRowPitch;
                         }
@@ -2747,9 +2760,11 @@ HRESULT DirectX::SaveToDDSFile(
         return E_FAIL;
 #endif
 
-    const bool use24bpp = ((metadata.format == DXGI_FORMAT_B8G8R8X8_UNORM)
+    // libdds: EncodeDDSHeader can select DX10 implicitly for texture arrays.
+    // Match its actual header choice so the pixel payload uses the same bit depth.
+    const bool use24bpp = (metadata.format == DXGI_FORMAT_B8G8R8X8_UNORM)
         && (flags & DDS_FLAGS_FORCE_24BPP_RGB)
-        && !(flags & (DDS_FLAGS_FORCE_DX10_EXT | DDS_FLAGS_FORCE_DX10_EXT_MISC2))) != 0;
+        && (required == DDS_MIN_HEADER_SIZE);
 
     std::unique_ptr<uint8_t[]> tempRow;
     if (use24bpp)
@@ -2784,6 +2799,9 @@ HRESULT DirectX::SaveToDDSFile(
                     if (!images[index].pixels)
                         return E_POINTER;
 
+                    if (use24bpp && !Valid24bppSource(images[index], metadata.width))
+                        return E_INVALIDARG;
+
                     assert(images[index].rowPitch > 0);
                     assert(images[index].slicePitch > 0);
 
@@ -2816,12 +2834,11 @@ HRESULT DirectX::SaveToDDSFile(
                     else if (use24bpp)
                     {
                         const size_t rowPitch = images[index].rowPitch;
-                        const uint8_t * __restrict sPtr = images[index].pixels;
 
                         assert(ddsRowPitch <= metadata.width * 3u);
                         for (size_t j = 0; j < images[index].height; ++j)
                         {
-                            CopyScanline24bpp(tempRow.get(), sPtr, images[index].width);
+                            CopyScanline24bpp(tempRow.get(), images[index].pixels + j * rowPitch, images[index].width);
 
                         #ifdef _WIN32
                             if (!WriteFile(hFile.get(), tempRow.get(), static_cast<DWORD>(ddsRowPitch), &bytesWritten, nullptr))
@@ -2839,7 +2856,6 @@ HRESULT DirectX::SaveToDDSFile(
                                 return E_FAIL;
                         #endif
 
-                            sPtr += rowPitch;
                         }
                     }
                     else
@@ -2901,6 +2917,9 @@ HRESULT DirectX::SaveToDDSFile(
                     if (!images[index].pixels)
                         return E_POINTER;
 
+                    if (use24bpp && !Valid24bppSource(images[index], metadata.width))
+                        return E_INVALIDARG;
+
                     assert(images[index].rowPitch > 0);
                     assert(images[index].slicePitch > 0);
 
@@ -2933,12 +2952,11 @@ HRESULT DirectX::SaveToDDSFile(
                     else if (use24bpp)
                     {
                         const size_t rowPitch = images[index].rowPitch;
-                        const uint8_t * __restrict sPtr = images[index].pixels;
 
                         assert(ddsRowPitch <= metadata.width * 3u);
                         for (size_t j = 0; j < images[index].height; ++j)
                         {
-                            CopyScanline24bpp(tempRow.get(), sPtr, images[index].width);
+                            CopyScanline24bpp(tempRow.get(), images[index].pixels + j * rowPitch, images[index].width);
 
                         #ifdef _WIN32
                             if (!WriteFile(hFile.get(), tempRow.get(), static_cast<DWORD>(ddsRowPitch), &bytesWritten, nullptr))
@@ -2955,7 +2973,6 @@ HRESULT DirectX::SaveToDDSFile(
                             if (!outFile)
                                 return E_FAIL;
                         #endif
-                            sPtr += rowPitch;
                         }
                     }
                     else

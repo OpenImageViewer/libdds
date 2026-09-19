@@ -282,6 +282,72 @@ namespace
         CHECK(FAILED(LoadFromHDRMemory(literal.data(), literal.size(), nullptr, decoded)));
     }
 
+    void DDS24Bit()
+    {
+        const auto path = (std::filesystem::current_path() / "libdds-24bpp.dds").wstring();
+        for (int kind = 0; kind < 7; ++kind)
+        {
+#ifdef LIBDDS_REFERENCE
+            // The untouched reference writes a mismatched 24bpp payload for implicit DX10 arrays.
+            if (kind >= 5)
+                continue;
+#endif
+            ScratchImage input, loaded, fromFile;
+            if (kind == 1)
+                CHECK(SUCCEEDED(input.Initialize3D(DXGI_FORMAT_B8G8R8X8_UNORM, 5, 3, 2, 3)));
+            else if (kind == 2 || kind == 6)
+                CHECK(SUCCEEDED(input.InitializeCube(DXGI_FORMAT_B8G8R8X8_UNORM, 4, 4, kind == 6 ? 2 : 1, 3)));
+            else
+                CHECK(SUCCEEDED(input.Initialize2D(DXGI_FORMAT_B8G8R8X8_UNORM, 5, 3, kind == 5 ? 2 : 1, 3)));
+            for (size_t i = 0; i < input.GetPixelsSize(); ++i)
+                input.GetPixels()[i] = (i % 4 == 3) ? 255 : static_cast<uint8_t>(i * 17);
+            DDS_FLAGS flags = DDS_FLAGS_FORCE_24BPP_RGB;
+            if (kind == 3)
+                flags |= DDS_FLAGS_FORCE_DX10_EXT;
+            if (kind == 4)
+                flags |= DDS_FLAGS_FORCE_DX10_EXT_MISC2;
+            const bool legacy = kind < 3;
+            Blob blob;
+            CHECK(
+                SUCCEEDED(SaveToDDSMemory(input.GetImages(), input.GetImageCount(), input.GetMetadata(), flags, blob)));
+            size_t expectedSize = legacy ? 128 : 148;
+            for (size_t i = 0; i < input.GetImageCount(); ++i)
+                expectedSize += input.GetImages()[i].width * input.GetImages()[i].height * (legacy ? 3 : 4);
+            CHECK(blob.GetBufferSize() == expectedSize);
+            uint32_t pitch = 0, bitCount = 0;
+            std::memcpy(&pitch, blob.GetBufferPointer() + 20, 4);
+            std::memcpy(&bitCount, blob.GetBufferPointer() + 88, 4);
+            CHECK(pitch == input.GetMetadata().width * (legacy ? 3 : 4));
+            CHECK(bitCount == (legacy ? 24 : 0));
+            CHECK(SUCCEEDED(
+                LoadFromDDSMemory(blob.GetBufferPointer(), blob.GetBufferSize(), DDS_FLAGS_NONE, nullptr, loaded)));
+            CHECK(loaded.GetImageCount() == input.GetImageCount());
+            for (size_t i = 0; i < input.GetImageCount(); ++i)
+            {
+                const auto& src = input.GetImages()[i];
+                const auto& dst = loaded.GetImages()[i];
+                CHECK(dst.width == src.width && dst.height == src.height);
+                for (size_t y = 0; y < src.height; ++y)
+                {
+                    for (size_t x = 0; x < src.width; ++x)
+                    {
+                        const auto* a = src.pixels + y * src.rowPitch + x * 4;
+                        const auto* b = dst.pixels + y * dst.rowPitch + x * 4;
+                        CHECK(b[0] == a[legacy ? 2 : 0] && b[1] == a[1] && b[2] == a[legacy ? 0 : 2] && b[3] == 255);
+                    }
+                }
+            }
+            CHECK(SUCCEEDED(
+                SaveToDDSFile(input.GetImages(), input.GetImageCount(), input.GetMetadata(), flags, path.c_str())));
+            CHECK(std::filesystem::file_size(path) == blob.GetBufferSize());
+            CHECK(SUCCEEDED(LoadFromDDSFile(path.c_str(), DDS_FLAGS_NONE, nullptr, fromFile)));
+            Equal(loaded, fromFile);
+            std::filesystem::remove(path);
+            if (kind < 5)
+                Record(loaded);
+        }
+    }
+
     void Processing()
     {
         auto input = ColorImage(8, 8, .25f, .5f, .75f, .5f);
@@ -357,6 +423,51 @@ namespace
         for (const auto& p : {ddsPath, hdrPath, tgaPath})
             std::filesystem::remove(p);
     }
+#ifndef LIBDDS_REFERENCE
+
+    void DDS24BitBounds()
+    {
+        ScratchImage input;
+        CHECK(SUCCEEDED(input.Initialize2D(DXGI_FORMAT_B8G8R8X8_UNORM, 2, 2, 1, 1)));
+        const auto path = (std::filesystem::current_path() / "libdds-24bpp-invalid.dds").wstring();
+        std::array<uint8_t, 24> wider{};
+        for (int kind = 0; kind < 4; ++kind)
+        {
+            auto invalid = *input.GetImages();
+            if (kind == 0)
+                invalid.rowPitch = 4;
+            if (kind == 1)
+                invalid.slicePitch = 15;
+            if (kind == 2)
+                invalid = {3, 2, DXGI_FORMAT_B8G8R8X8_UNORM, 12, wider.size(), wider.data()};
+            if (kind == 3)
+            {
+                invalid.rowPitch   = 6;
+                invalid.slicePitch = 12;
+            }
+            Blob blob;
+            CHECK(FAILED(SaveToDDSMemory(&invalid, 1, input.GetMetadata(), DDS_FLAGS_FORCE_24BPP_RGB, blob)));
+            CHECK(FAILED(SaveToDDSFile(&invalid, 1, input.GetMetadata(), DDS_FLAGS_FORCE_24BPP_RGB, path.c_str())));
+            std::filesystem::remove(path);
+        }
+        // Row padding is skipped, and no padding after the last row is required.
+        std::array<uint8_t, 20> padded{1, 2, 3, 255, 4, 5, 6, 255, 99, 99, 99, 99, 7, 8, 9, 255, 10, 11, 12, 255};
+        const Image source{2, 2, DXGI_FORMAT_B8G8R8X8_UNORM, 12, padded.size(), padded.data()};
+        Blob blob;
+        CHECK(SUCCEEDED(SaveToDDSMemory(&source, 1, input.GetMetadata(), DDS_FLAGS_FORCE_24BPP_RGB, blob)));
+        const std::array<uint8_t, 12> expected{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+        CHECK(blob.GetBufferSize() == 128 + expected.size());
+        CHECK(std::memcmp(blob.GetBufferPointer() + 128, expected.data(), expected.size()) == 0);
+        CHECK(SUCCEEDED(SaveToDDSFile(&source, 1, input.GetMetadata(), DDS_FLAGS_FORCE_24BPP_RGB, path.c_str())));
+        ScratchImage loaded, fromFile;
+        CHECK(SUCCEEDED(
+            LoadFromDDSMemory(blob.GetBufferPointer(), blob.GetBufferSize(), DDS_FLAGS_NONE, nullptr, loaded)));
+        CHECK(SUCCEEDED(LoadFromDDSFile(path.c_str(), DDS_FLAGS_NONE, nullptr, fromFile)));
+        Equal(loaded, fromFile);
+        std::filesystem::remove(path);
+    }
+
+#endif
 }  // namespace
 int main(int argc, char** argv)
 {
@@ -373,8 +484,12 @@ int main(int argc, char** argv)
         UpstreamValidation();
         PitchBounds();
         HDRBounds();
+        DDS24Bit();
         Processing();
         OtherFormatsAndFiles();
+#ifndef LIBDDS_REFERENCE
+        DDS24BitBounds();
+#endif
         if (snapshot.is_open())
         {
             snapshot.flush();

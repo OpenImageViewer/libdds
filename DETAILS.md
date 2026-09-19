@@ -32,7 +32,9 @@ The *decompression writer selection* commit similarly chooses the RGBA8 or gener
 output path before the block loop. The *batched RGBA8 packing* commit gives
 conversion and decompression a [shared writer](DirectXTex/DirectXTexConvert.cpp#L1655)
 that packs four pixels at a time using SSE2 or NEON. It preserves the existing
-rounding order and stores the remaining pixels individually.
+rounding order and stores the remaining pixels individually. The *unity
+grouping* commit makes these shared stores available for compiler inlining by
+building compression and conversion together.
 
 ## Reuse calculations within each block
 

@@ -18,6 +18,11 @@ add_library(libdds STATIC
     DirectXTex/DirectXTexTGA.cpp
     DirectXTex/DirectXTexUtil.cpp
 )
+# Keep the scanline implementation visible to the block decoder without changing
+# either upstream source file. Other files keep their original translation units.
+set_source_files_properties(DirectXTex/DirectXTexCompress.cpp DirectXTex/DirectXTexConvert.cpp
+    PROPERTIES UNITY_GROUP block_codec)
+set_target_properties(libdds PROPERTIES UNITY_BUILD ON UNITY_BUILD_MODE GROUP)
 add_library(libdds::libdds ALIAS libdds)
 target_compile_features(libdds PUBLIC cxx_std_17)
 set_target_properties(libdds PROPERTIES POSITION_INDEPENDENT_CODE ON)

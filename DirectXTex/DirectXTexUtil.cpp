@@ -957,6 +957,17 @@ size_t DirectX::BytesPerBlock(DXGI_FORMAT fmt) noexcept
 
 namespace
 {
+    // libdds: alignment and planar row counts also need checked addition.
+    inline uint64_t AddOverflow(uint64_t a, uint64_t b, bool& overflow) noexcept
+    {
+        if (a > UINT64_MAX - b)
+        {
+            overflow = true;
+            return 0;
+        }
+        return a + b;
+    }
+
     // Multiplies two 64-bit values, setting 'overflow' if the mathematical result is
     // not representable. Returns 0 in that case; callers test the flag once after all
     // computations rather than at every individual site.
@@ -1100,7 +1111,7 @@ HRESULT DirectX::ComputePitch(DXGI_FORMAT fmt, size_t width, size_t height,
         }
         assert(IsPlanar(fmt));
         pitch = MulOverflow((uint64_t(width) >> 1) + (width & 1u), 2u, overflow);
-        slice = MulOverflow(pitch, uint64_t(height) + ((uint64_t(height) >> 1) + (height & 1u)), overflow);
+        slice = MulOverflow(pitch, AddOverflow(height, (uint64_t(height) >> 1) + (height & 1u), overflow), overflow);
         break;
 
     case DXGI_FORMAT_P010:
@@ -1124,7 +1135,7 @@ HRESULT DirectX::ComputePitch(DXGI_FORMAT fmt, size_t width, size_t height,
     case XBOX_DXGI_FORMAT_X16_TYPELESS_G8_UINT:
         assert(IsPlanar(fmt));
         pitch = MulOverflow((uint64_t(width) >> 1) + (width & 1u), 4u, overflow);
-        slice = MulOverflow(pitch, uint64_t(height) + ((uint64_t(height) >> 1) + (height & 1u)), overflow);
+        slice = MulOverflow(pitch, AddOverflow(height, (uint64_t(height) >> 1) + (height & 1u), overflow), overflow);
         break;
 
     case DXGI_FORMAT_NV11:
@@ -1147,13 +1158,13 @@ HRESULT DirectX::ComputePitch(DXGI_FORMAT fmt, size_t width, size_t height,
         }
         assert(IsPlanar(fmt));
         pitch = uint64_t(width);
-        slice = MulOverflow(pitch, uint64_t(height) + (((uint64_t(height) >> 1) + (height & 1u)) * 2u), overflow);
+        slice = MulOverflow(pitch, AddOverflow(height, MulOverflow((uint64_t(height) >> 1) + (height & 1u), 2u, overflow), overflow), overflow);
         break;
 
     case WIN10_DXGI_FORMAT_V408:
         assert(IsPlanar(fmt));
         pitch = uint64_t(width);
-        slice = MulOverflow(pitch, uint64_t(height) + (uint64_t(height >> 1) * 4u), overflow);
+        slice = MulOverflow(pitch, AddOverflow(height, MulOverflow(uint64_t(height) >> 1, 4u, overflow), overflow), overflow);
         break;
 
     default:
@@ -1177,36 +1188,36 @@ HRESULT DirectX::ComputePitch(DXGI_FORMAT fmt, size_t width, size_t height,
             {
                 if (flags & CP_FLAGS_PAGE4K)
                 {
-                    pitch = MulOverflow((MulOverflow(width, bpp, overflow) + 32767u) / 32768u, 4096u, overflow);
+                    pitch = MulOverflow(AddOverflow(MulOverflow(width, bpp, overflow), 32767u, overflow) / 32768u, 4096u, overflow);
                     slice = MulOverflow(pitch, height, overflow);
                 }
                 else if (flags & CP_FLAGS_ZMM)
                 {
-                    pitch = MulOverflow((MulOverflow(width, bpp, overflow) + 511u) / 512u, 64u, overflow);
+                    pitch = MulOverflow(AddOverflow(MulOverflow(width, bpp, overflow), 511u, overflow) / 512u, 64u, overflow);
                     slice = MulOverflow(pitch, height, overflow);
                 }
                 else if (flags & CP_FLAGS_YMM)
                 {
-                    pitch = MulOverflow((MulOverflow(width, bpp, overflow) + 255u) / 256u, 32u, overflow);
+                    pitch = MulOverflow(AddOverflow(MulOverflow(width, bpp, overflow), 255u, overflow) / 256u, 32u, overflow);
                     slice = MulOverflow(pitch, height, overflow);
                 }
                 else if (flags & CP_FLAGS_PARAGRAPH)
                 {
-                    pitch = MulOverflow((MulOverflow(width, bpp, overflow) + 127u) / 128u, 16u, overflow);
+                    pitch = MulOverflow(AddOverflow(MulOverflow(width, bpp, overflow), 127u, overflow) / 128u, 16u, overflow);
                     slice = MulOverflow(pitch, height, overflow);
                 }
                 else // DWORD alignment
                 {
                     // Special computation for some incorrectly created DDS files based on
                     // legacy DirectDraw assumptions about pitch alignment
-                    pitch = MulOverflow((MulOverflow(width, bpp, overflow) + 31u) / 32u, sizeof(uint32_t), overflow);
+                    pitch = MulOverflow(AddOverflow(MulOverflow(width, bpp, overflow), 31u, overflow) / 32u, sizeof(uint32_t), overflow);
                     slice = MulOverflow(pitch, height, overflow);
                 }
             }
             else
             {
                 // Default byte alignment
-                pitch = (MulOverflow(width, bpp, overflow) + 7u) / 8u;
+                pitch = AddOverflow(MulOverflow(width, bpp, overflow), 7u, overflow) / 8u;
                 slice = MulOverflow(pitch, height, overflow);
             }
         }

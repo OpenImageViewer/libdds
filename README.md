@@ -45,6 +45,7 @@ preserved apart from CRLF normalization.
 
 - BC7 encoding: align colors for packed-vector loads and define the zero rounding bias at eight-bit precision.
 - RGB/BGR swizzling: use unaligned-safe word copies for serialized pixel storage, including TGA data.
+- Pitch calculation: reject addition overflow in alignment and planar-height calculations, in addition to upstream multiplication checks.
 
 ## Upstream and licenses
 

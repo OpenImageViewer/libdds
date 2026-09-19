@@ -217,6 +217,44 @@ namespace
               E_INVALIDARG);
     }
 
+    void PitchBounds()
+    {
+        size_t row = 0, slice = 0;
+        CHECK(SUCCEEDED(ComputePitch(DXGI_FORMAT_BC1_UNORM, 5, 7, row, slice)) && row == 16 && slice == 32);
+        CHECK(SUCCEEDED(ComputePitch(DXGI_FORMAT_NV12, 5, 6, row, slice)) && row == 6 && slice == 54);
+        CHECK(SUCCEEDED(ComputePitch(DXGI_FORMAT_R8_UNORM, 5, 3, row, slice, CP_FLAGS_LEGACY_DWORD)) && row == 8 &&
+              slice == 24);
+        constexpr size_t maximum = (std::numeric_limits<size_t>::max)();
+        for (const auto format :
+             {DXGI_FORMAT_BC1_UNORM, DXGI_FORMAT_BC7_UNORM, DXGI_FORMAT_YUY2, DXGI_FORMAT_R32G32B32A32_FLOAT})
+        {
+            row = slice = 123;
+            CHECK(FAILED(ComputePitch(format, maximum, maximum, row, slice)) && row == 0 && slice == 0);
+        }
+#ifndef LIBDDS_REFERENCE
+        // Upstream's multiplication guards do not cover alignment and planar additions.
+        for (const auto alignment :
+             {CP_FLAGS_NONE, CP_FLAGS_LEGACY_DWORD, CP_FLAGS_PARAGRAPH, CP_FLAGS_YMM, CP_FLAGS_ZMM, CP_FLAGS_PAGE4K})
+        {
+            CHECK(FAILED(ComputePitch(DXGI_FORMAT_R1_UNORM, maximum, 1, row, slice, alignment)) && row == 0 &&
+                  slice == 0);
+        }
+        if constexpr (sizeof(size_t) == 8)
+        {
+            CHECK(FAILED(ComputePitch(DXGI_FORMAT_R8_UNORM, maximum / 8, 1, row, slice, CP_FLAGS_LEGACY_DWORD)) &&
+                  row == 0 && slice == 0);
+            for (const auto format : {DXGI_FORMAT_NV12, DXGI_FORMAT_P010})
+            {
+                CHECK(FAILED(ComputePitch(format, 2, size_t(0xaaaaaaaaaaaaaaacULL), row, slice)) && row == 0 &&
+                      slice == 0);
+            }
+            CHECK(FAILED(ComputePitch(DXGI_FORMAT_V208, 1, size_t(1ULL << 63), row, slice)) && row == 0 && slice == 0);
+            CHECK(FAILED(ComputePitch(DXGI_FORMAT_V408, 1, size_t(0x5555555555555556ULL), row, slice)) && row == 0 &&
+                  slice == 0);
+        }
+#endif
+    }
+
     void HDRBounds()
     {
         const std::string prefix = "#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n";
@@ -333,6 +371,7 @@ int main(int argc, char** argv)
         BCFormats();
         Containers();
         UpstreamValidation();
+        PitchBounds();
         HDRBounds();
         Processing();
         OtherFormatsAndFiles();

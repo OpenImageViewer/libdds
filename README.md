@@ -69,6 +69,20 @@ conversion and decompression a [shared writer](DirectXTex/DirectXTexConvert.cpp#
 that packs four pixels at a time using SSE2 or NEON. It preserves the existing
 rounding order and stores the remaining pixels individually.
 
+#### Reuse calculations within each block
+
+BC4 and BC5 have another repeated calculation: pixels select from eight
+interpolated values per channel. The *interpolation palette caching* commit
+[computes those values once per block](DirectXTex/BC4BC5.cpp#L398), then indexes them
+for each pixel. It retains the original interpolation formulas and signed-endpoint
+rules. The earlier *unaligned BC4/BC5 payload safety* fix supplies safe local word
+loads independently of this optimization.
+
+These changes affect different workloads differently. Native images benefit mainly
+from avoided allocation and copying. Compressed images also benefit from reduced
+setup, packing and interpolation work, but still pay for decoding and writing every
+output pixel. Their combined speedups cannot be attributed to any one commit.
+
 ### License
 
 [MIT license](LICENSE). Bundled dependency licenses remain in their directories.

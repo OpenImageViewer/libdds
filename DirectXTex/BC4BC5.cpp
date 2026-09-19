@@ -391,15 +391,18 @@ void DirectX::D3DXDecodeBC4U(XMVECTOR *pColor, const uint8_t *pBC) noexcept
     assert(pColor && pBC);
     static_assert(sizeof(BC4_UNORM) == 8, "BC4_UNORM should be 8 bytes");
 
-    // libdds: copy the encoded word safely before reading its pixels.
+    // libdds: copy the encoded word safely, then reuse its eight decoded values.
     // DecodeFromIndex retains upstream's interpolation and SNORM endpoint rules.
     BC4_UNORM block;
     memcpy(&block, pBC, sizeof(block));
+    float palette[8];
+    for (size_t index = 0; index < 8; ++index)
+        palette[index] = block.DecodeFromIndex(index);
 
     for (size_t i = 0; i < NUM_PIXELS_PER_BLOCK; ++i)
     {
     #pragma prefast(suppress:22103, "writing blocks in two halves confuses tool")
-        pColor[i] = XMVectorSet(block.R(i), 0, 0, 1.0f);
+        pColor[i] = XMVectorSet(palette[block.GetIndex(i)], 0, 0, 1.0f);
     }
 }
 
@@ -409,15 +412,18 @@ void DirectX::D3DXDecodeBC4S(XMVECTOR *pColor, const uint8_t *pBC) noexcept
     assert(pColor && pBC);
     static_assert(sizeof(BC4_SNORM) == 8, "BC4_SNORM should be 8 bytes");
 
-    // libdds: copy the encoded word safely before reading its pixels.
+    // libdds: copy the encoded word safely, then reuse its eight decoded values.
     // DecodeFromIndex retains upstream's interpolation and SNORM endpoint rules.
     BC4_SNORM block;
     memcpy(&block, pBC, sizeof(block));
+    float palette[8];
+    for (size_t index = 0; index < 8; ++index)
+        palette[index] = block.DecodeFromIndex(index);
 
     for (size_t i = 0; i < NUM_PIXELS_PER_BLOCK; ++i)
     {
     #pragma prefast(suppress:22103, "writing blocks in two halves confuses tool")
-        pColor[i] = XMVectorSet(block.R(i), 0, 0, 1.0f);
+        pColor[i] = XMVectorSet(palette[block.GetIndex(i)], 0, 0, 1.0f);
     }
 }
 
@@ -476,11 +482,17 @@ void DirectX::D3DXDecodeBC5U(XMVECTOR *pColor, const uint8_t *pBC) noexcept
     BC4_UNORM red, green;
     memcpy(&red, pBC, sizeof(red));
     memcpy(&green, pBC + sizeof(red), sizeof(green));
+    float redPalette[8], greenPalette[8];
+    for (size_t index = 0; index < 8; ++index)
+    {
+        redPalette[index] = red.DecodeFromIndex(index);
+        greenPalette[index] = green.DecodeFromIndex(index);
+    }
 
     for (size_t i = 0; i < NUM_PIXELS_PER_BLOCK; ++i)
     {
     #pragma prefast(suppress:22103, "writing blocks in two halves confuses tool")
-        pColor[i] = XMVectorSet(red.R(i), green.R(i), 0, 1.0f);
+        pColor[i] = XMVectorSet(redPalette[red.GetIndex(i)], greenPalette[green.GetIndex(i)], 0, 1.0f);
     }
 }
 
@@ -493,11 +505,17 @@ void DirectX::D3DXDecodeBC5S(XMVECTOR *pColor, const uint8_t *pBC) noexcept
     BC4_SNORM red, green;
     memcpy(&red, pBC, sizeof(red));
     memcpy(&green, pBC + sizeof(red), sizeof(green));
+    float redPalette[8], greenPalette[8];
+    for (size_t index = 0; index < 8; ++index)
+    {
+        redPalette[index] = red.DecodeFromIndex(index);
+        greenPalette[index] = green.DecodeFromIndex(index);
+    }
 
     for (size_t i = 0; i < NUM_PIXELS_PER_BLOCK; ++i)
     {
     #pragma prefast(suppress:22103, "writing blocks in two halves confuses tool")
-        pColor[i] = XMVectorSet(red.R(i), green.R(i), 0, 1.0f);
+        pColor[i] = XMVectorSet(redPalette[red.GetIndex(i)], greenPalette[green.GetIndex(i)], 0, 1.0f);
     }
 }
 

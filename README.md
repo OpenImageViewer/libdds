@@ -43,6 +43,8 @@ The platform bridge and WIC guards isolate the CPU subset. Private resource-limi
 constants retain upstream DDS validation limits. Vendor source formatting is
 preserved apart from CRLF normalization.
 
+- BC7 encoding: align colors for packed-vector loads and define the zero rounding bias at eight-bit precision.
+
 ## Upstream and licenses
 
 - DirectXTex: `868198cb4bcbc4e359372e7ba38d7a6dda3a6afa` (2.1.1), MIT.

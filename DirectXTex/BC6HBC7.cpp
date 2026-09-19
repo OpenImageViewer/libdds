@@ -331,7 +331,8 @@ namespace
 
 namespace DirectX
 {
-    class LDRColorA
+    // libdds: packed-vector loads require four-byte alignment, including nested encoder arrays.
+    class alignas(PackedVector::XMUBYTE4) LDRColorA
     {
     public:
         uint8_t r, g, b, a;
@@ -806,7 +807,8 @@ namespace
         static uint8_t Quantize(_In_ uint8_t comp, _In_ uint8_t uPrec) noexcept
         {
             assert(0 < uPrec && uPrec <= 8);
-            const uint8_t rnd = std::min<uint8_t>(255u, static_cast<uint8_t>(unsigned(comp) + (1u << (7 - uPrec))));
+            // libdds: full 8-bit precision has zero bias; avoid a negative shift exponent.
+            const uint8_t rnd = std::min<uint8_t>(255u, static_cast<uint8_t>(unsigned(comp) + (128u >> uPrec)));
             return uint8_t(rnd >> (8u - uPrec));
         }
 

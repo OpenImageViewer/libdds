@@ -490,55 +490,40 @@ namespace
         }
 
         const auto conversion = PrepareScanlineConversion(format, cformat, TEX_FILTER_DEFAULT);
-
-        XM_ALIGNED_DATA(16) XMVECTOR temp[16];
-        const uint8_t *pSrc = cImage.pixels;
-        const size_t rowPitch = result.rowPitch;
-        for (size_t h = 0; h < cImage.height; h += 4)
+        return WithScanlineStore(format, [&](auto writer) noexcept -> HRESULT
         {
-            const uint8_t *sptr = pSrc;
-            uint8_t* dptr = pDest;
-            const size_t ph = std::min<size_t>(4, cImage.height - h);
-            size_t w = 0;
-            for (size_t count = 0; (count < cImage.rowPitch) && (w < cImage.width); count += sbpp, w += 4)
+            constexpr auto store = decltype(writer)::value;
+            XM_ALIGNED_DATA(16) XMVECTOR temp[16];
+            const uint8_t *pSrc = cImage.pixels;
+            const size_t rowPitch = result.rowPitch;
+            for (size_t h = 0; h < cImage.height; h += 4)
             {
-                pfDecode(temp, sptr);
-                if (!conversion.identity)
-                    ConvertScanline(temp, 16, conversion);
-
-                const size_t pw = std::min<size_t>(4, cImage.width - w);
-                assert(pw > 0 && ph > 0);
-
-                if (!StoreScanline(dptr, rowPitch, format, &temp[0], pw))
-                    return E_FAIL;
-
-                if (ph > 1)
+                const uint8_t *sptr = pSrc;
+                uint8_t* dptr = pDest;
+                const size_t ph = std::min<size_t>(4, cImage.height - h);
+                size_t w = 0;
+                for (size_t count = 0; (count < cImage.rowPitch) && (w < cImage.width); count += sbpp, w += 4)
                 {
-                    if (!StoreScanline(dptr + rowPitch, rowPitch, format, &temp[4], pw))
+                    pfDecode(temp, sptr);
+                    if (!conversion.identity)
+                        ConvertScanline(temp, 16, conversion);
+
+                    const size_t pw = std::min<size_t>(4, cImage.width - w);
+                    assert(pw > 0 && ph > 0);
+
+                    if (!store(dptr, rowPitch, format, temp, 4, pw, ph))
                         return E_FAIL;
 
-                    if (ph > 2)
-                    {
-                        if (!StoreScanline(dptr + rowPitch * 2, rowPitch, format, &temp[8], pw))
-                            return E_FAIL;
-
-                        if (ph > 3)
-                        {
-                            if (!StoreScanline(dptr + rowPitch * 3, rowPitch, format, &temp[12], pw))
-                                return E_FAIL;
-                        }
-                    }
+                    sptr += sbpp;
+                    dptr += dbpp * 4;
                 }
 
-                sptr += sbpp;
-                dptr += dbpp * 4;
+                pSrc += cImage.rowPitch;
+                pDest += rowPitch * 4;
             }
 
-            pSrc += cImage.rowPitch;
-            pDest += rowPitch * 4;
-        }
-
-        return S_OK;
+            return S_OK;
+        });
     }
 }
 

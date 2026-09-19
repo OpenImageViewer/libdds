@@ -28,6 +28,8 @@ and transfer flags once per image in CPU conversion and BC encoding/decoding.
 skips conversion arithmetic when numeric and channel semantics already match and
 no transfer-function change remains.
 
-The *batched RGBA8 packing* commit gives conversion a shared writer that packs
-four pixels at a time using SSE2 or NEON. It preserves the existing rounding
-order and stores the remaining pixels individually.
+The *decompression writer selection* commit similarly chooses the RGBA8 or generic
+output path before the block loop. The *batched RGBA8 packing* commit gives
+conversion and decompression a [shared writer](DirectXTex/DirectXTexConvert.cpp#L1655)
+that packs four pixels at a time using SSE2 or NEON. It preserves the existing
+rounding order and stores the remaining pixels individually.

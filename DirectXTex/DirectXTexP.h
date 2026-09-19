@@ -367,6 +367,28 @@ namespace DirectX
             _In_reads_bytes_(size) const void* pSource, _In_ size_t size,
             _In_ DXGI_FORMAT format, _In_ TEX_FILTER_FLAGS flags) noexcept;
 
+        // libdds: a prepared destination writer can consume multiple rows. Source
+        // pitch counts XMVECTOR pixels; destination pitch remains a byte count.
+        using ScanlineStore = bool (*)(void*, size_t, DXGI_FORMAT,
+            const XMVECTOR*, size_t, size_t, size_t) noexcept;
+        bool StoreRGBA8Rows(void*, size_t, DXGI_FORMAT, const XMVECTOR*, size_t, size_t, size_t) noexcept;
+        bool StoreGenericRows(void*, size_t, DXGI_FORMAT, const XMVECTOR*, size_t, size_t, size_t) noexcept;
+
+        // Resolve destination packing outside the image loop. A concrete writer
+        // lets the compiler inline row stores without per-block indirect calls.
+        template<typename Action>
+        auto WithScanlineStore(DXGI_FORMAT format, Action&& action) noexcept
+        {
+            switch (format)
+            {
+            case DXGI_FORMAT_R8G8B8A8_UNORM:
+            case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+                return action(std::integral_constant<ScanlineStore, StoreRGBA8Rows>{});
+            default:
+                return action(std::integral_constant<ScanlineStore, StoreGenericRows>{});
+            }
+        }
+
         _Success_(return) bool __cdecl StoreScanline(
             _Out_writes_bytes_(size) void* pDestination, _In_ size_t size, _In_ DXGI_FORMAT format,
             _In_reads_(count) const XMVECTOR* pSource, _In_ size_t count, _In_ float threshold = 0) noexcept;

@@ -1701,6 +1701,30 @@ namespace
 
 }
 
+bool DirectX::Internal::StoreRGBA8Rows(void* destination, size_t rowPitch, DXGI_FORMAT,
+    const XMVECTOR* source, size_t sourcePitch, size_t width, size_t height) noexcept
+{
+    auto pixels = static_cast<uint8_t*>(destination);
+    for (size_t row = 0; row < height; ++row)
+    {
+        if (!StoreRGBA8Scanline(pixels + row * rowPitch, rowPitch, source + row * sourcePitch, width))
+            return false;
+    }
+    return true;
+}
+
+bool DirectX::Internal::StoreGenericRows(void* destination, size_t rowPitch, DXGI_FORMAT format,
+    const XMVECTOR* source, size_t sourcePitch, size_t width, size_t height) noexcept
+{
+    auto pixels = static_cast<uint8_t*>(destination);
+    for (size_t row = 0; row < height; ++row)
+    {
+        if (!StoreScanline(pixels + row * rowPitch, rowPitch, format, source + row * sourcePitch, width))
+            return false;
+    }
+    return true;
+}
+
 _Use_decl_annotations_
 bool DirectX::Internal::StoreScanline(
     void* pDestination,

@@ -48,6 +48,7 @@ preserved apart from CRLF normalization.
 - Pitch calculation: reject addition overflow in alignment and planar-height calculations, in addition to upstream multiplication checks.
 - 24-bit DDS writing: follow the actual encoded header choice, including implicit DX10 arrays; validate source rows, slices and temporary-buffer width. Final source rows need not include trailing padding.
 - BC4/BC5 decoding: copy encoded words to aligned local storage before accessing them. This safety fix does not cache interpolation palettes.
+- DDS parsing: read serialized magic and headers without alignment assumptions.
 
 ## Upstream and licenses
 

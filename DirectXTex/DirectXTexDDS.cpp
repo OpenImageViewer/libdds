@@ -339,13 +339,17 @@ namespace
         }
 
         // DDS files always start with the same magic number ("DDS ")
-        const auto dwMagicNumber = *static_cast<const uint32_t*>(pSource);
+        uint32_t dwMagicNumber;
+        memcpy(&dwMagicNumber, pSource, sizeof(dwMagicNumber));
         if (dwMagicNumber != DDS_MAGIC)
         {
             return E_FAIL;
         }
 
-        auto pHeader = reinterpret_cast<const DDS_HEADER*>(static_cast<const uint8_t*>(pSource) + sizeof(uint32_t));
+        // libdds: serialized headers can start at an unaligned address.
+        DDS_HEADER header;
+        memcpy(&header, static_cast<const uint8_t*>(pSource) + sizeof(uint32_t), sizeof(header));
+        const auto pHeader = &header;
 
         // Verify header to validate DDS file
         if (flags & DDS_FLAGS_PERMISSIVE)
@@ -398,7 +402,9 @@ namespace
                 return E_FAIL;
             }
 
-            auto d3d10ext = reinterpret_cast<const DDS_HEADER_DXT10*>(static_cast<const uint8_t*>(pSource) + DDS_MIN_HEADER_SIZE);
+            DDS_HEADER_DXT10 extension;
+            memcpy(&extension, static_cast<const uint8_t*>(pSource) + DDS_MIN_HEADER_SIZE, sizeof(extension));
+            const auto d3d10ext = &extension;
             convFlags |= CONV_FLAGS_DX10;
 
             metadata.arraySize = d3d10ext->arraySize;

@@ -509,6 +509,21 @@ namespace
     }
 
 #endif
+
+#ifndef LIBDDS_REFERENCE
+    void UnalignedDDSHeaders()
+    {
+        ScratchImage input, owned;
+        CHECK(SUCCEEDED(input.Initialize2D(DXGI_FORMAT_R8G8B8A8_UNORM, 4, 4, 1, 3)));
+        Blob blob;
+        CHECK(SUCCEEDED(SaveToDDSMemory(input.GetImages(), input.GetImageCount(), input.GetMetadata(),
+                                        DDS_FLAGS_FORCE_DX10_EXT, blob)));
+        std::vector<uint8_t> unaligned(blob.GetBufferSize() + 1);
+        std::memcpy(unaligned.data() + 1, blob.GetBufferPointer(), blob.GetBufferSize());
+        CHECK(SUCCEEDED(LoadFromDDSMemory(unaligned.data() + 1, blob.GetBufferSize(), DDS_FLAGS_NONE, nullptr, owned)));
+        Equal(input, owned);
+    }
+#endif
 }  // namespace
 int main(int argc, char** argv)
 {
@@ -530,6 +545,7 @@ int main(int argc, char** argv)
         Processing();
         OtherFormatsAndFiles();
 #ifndef LIBDDS_REFERENCE
+        UnalignedDDSHeaders();
         DDS24BitBounds();
 #endif
         if (snapshot.is_open())

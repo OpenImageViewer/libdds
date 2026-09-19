@@ -1650,6 +1650,57 @@ _Use_decl_annotations_ bool DirectX::Internal::LoadScanline(
         }\
         return false;
 
+namespace
+{
+    bool StoreRGBA8Scanline(void* pDestination, size_t size, const XMVECTOR* pSource, size_t count) noexcept
+    {
+        if (size >= sizeof(XMUBYTEN4))
+        {
+            auto dPtr = static_cast<XMUBYTEN4*>(pDestination);
+            const XMVECTOR* sPtr = pSource;
+            size_t remaining = std::min(count, size / sizeof(XMUBYTEN4));
+        #if defined(_XM_SSE_INTRINSICS_) || defined(_XM_ARM_NEON_INTRINSICS_)
+            // libdds: share batched packing across every RGBA8 scanline caller.
+            // Preserve XMStoreUByteN4's bias, saturation and truncation order.
+            static const XMVECTORF32 scale = { { { 255.f, 255.f, 255.f, 255.f } } };
+            const auto convert = [](FXMVECTOR value) noexcept
+            {
+                const XMVECTOR normalized = XMVectorSaturate(XMVectorAdd(value, g_8BitBiasV));
+                const XMVECTOR scaled = XMVectorMultiply(normalized, scale);
+            #if defined(_XM_SSE_INTRINSICS_)
+                return _mm_cvttps_epi32(scaled);
+            #else
+                return vcvtq_u32_f32(scaled);
+            #endif
+            };
+            for (; remaining >= 4; remaining -= 4, sPtr += 4, dPtr += 4)
+            {
+                const auto p0 = convert(sPtr[0]);
+                const auto p1 = convert(sPtr[1]);
+                const auto p2 = convert(sPtr[2]);
+                const auto p3 = convert(sPtr[3]);
+            #if defined(_XM_SSE_INTRINSICS_)
+                const auto packed = _mm_packus_epi16(_mm_packs_epi32(p0, p1), _mm_packs_epi32(p2, p3));
+                _mm_storeu_si128(reinterpret_cast<__m128i*>(dPtr), packed);
+            #else
+                const auto low = vqmovn_u16(vcombine_u16(vqmovn_u32(p0), vqmovn_u32(p1)));
+                const auto high = vqmovn_u16(vcombine_u16(vqmovn_u32(p2), vqmovn_u32(p3)));
+                vst1q_u8(reinterpret_cast<uint8_t*>(dPtr), vcombine_u8(low, high));
+            #endif
+            }
+        #endif
+            for (; remaining > 0; --remaining)
+            {
+                const XMVECTOR v = XMVectorAdd(*sPtr++, g_8BitBiasV);
+                XMStoreUByteN4(dPtr++, v);
+            }
+            return true;
+        }
+        return false;
+    }
+
+}
+
 _Use_decl_annotations_
 bool DirectX::Internal::StoreScanline(
     void* pDestination,
@@ -1769,18 +1820,7 @@ bool DirectX::Internal::StoreScanline(
 
     case DXGI_FORMAT_R8G8B8A8_UNORM:
     case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
-        if (size >= sizeof(XMUBYTEN4))
-        {
-            XMUBYTEN4 * __restrict dPtr = static_cast<XMUBYTEN4*>(pDestination);
-            for (size_t icount = 0; icount < (size - sizeof(XMUBYTEN4) + 1); icount += sizeof(XMUBYTEN4))
-            {
-                if (sPtr >= ePtr) break;
-                const XMVECTOR v = XMVectorAdd(*sPtr++, g_8BitBiasV);
-                XMStoreUByteN4(dPtr++, v);
-            }
-            return true;
-        }
-        return false;
+        return StoreRGBA8Scanline(pDestination, size, pSource, count);
 
     case DXGI_FORMAT_R8G8B8A8_UINT:
         STORE_SCANLINE(XMUBYTE4, XMStoreUByte4)

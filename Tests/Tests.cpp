@@ -193,6 +193,41 @@ namespace
         }
     }
 
+    void SharedScanlineOutput()
+    {
+        // Exercise the shared writer independently of BC decoding, including SIMD
+        // boundaries, fractional-byte rounding, out-of-range values and gamma flags.
+        const float values[]{
+            -1.f,           -0.f, 0.f, .49f / 255.f, .5f / 255.f, .51f / 255.f, 127.49f / 255.f, .5f, 127.51f / 255.f,
+            254.5f / 255.f, 1.f,  2.f};
+        const TEX_FILTER_FLAGS filters[]{TEX_FILTER_FORCE_NON_WIC,
+                                         TEX_FILTER_FORCE_NON_WIC | TEX_FILTER_SRGB_IN,
+                                         TEX_FILTER_FORCE_NON_WIC | TEX_FILTER_SRGB_OUT,
+                                         TEX_FILTER_FORCE_NON_WIC | TEX_FILTER_SRGB,
+                                         TEX_FILTER_FORCE_NON_WIC | TEX_FILTER_FLOAT_X2BIAS,
+                                         TEX_FILTER_FORCE_NON_WIC | TEX_FILTER_DITHER,
+                                         TEX_FILTER_FORCE_NON_WIC | TEX_FILTER_DITHER_DIFFUSION};
+        for (size_t width : {1u, 2u, 3u, 4u, 5u, 7u, 8u, 15u, 16u, 17u, 31u})
+        {
+            auto source = ColorImage(width, 3);
+            auto* data  = reinterpret_cast<XMFLOAT4*>(source.GetPixels());
+            for (size_t i = 0; i < width * 3; ++i)
+                data[i] = XMFLOAT4(values[i % 12], values[(i + 3) % 12], values[(i + 7) % 12], values[(i + 9) % 12]);
+            for (const auto format : {DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
+                                      DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_R8G8_UNORM,
+                                      DXGI_FORMAT_A8_UNORM, DXGI_FORMAT_R8_SNORM, DXGI_FORMAT_R16G16B16A16_FLOAT})
+            {
+                for (const auto filter : filters)
+                {
+                    ScratchImage converted;
+                    CHECK(SUCCEEDED(Convert(*source.GetImages(), format, filter, .5f, converted)));
+                    CHECK(converted.GetMetadata().width == width && converted.GetMetadata().height == 3);
+                    Record(converted);
+                }
+            }
+        }
+    }
+
     void BCOutputConversions()
     {
         const DXGI_FORMAT formats[]{DXGI_FORMAT_BC1_UNORM, DXGI_FORMAT_BC1_UNORM_SRGB, DXGI_FORMAT_BC2_UNORM,
@@ -823,6 +858,7 @@ int main(int argc, char** argv)
         KnownBlocks();
         BCFormats();
         NativeBCOutput();
+        SharedScanlineOutput();
         BCOutputConversions();
         BC45EndpointPairs();
         Containers();

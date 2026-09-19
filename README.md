@@ -63,6 +63,10 @@ and transfer flags once per image in CPU conversion and BC encoding/decoding.
 skips conversion arithmetic when numeric and channel semantics already match and
 no transfer-function change remains.
 
+The *batched RGBA8 packing* commit gives conversion a shared writer that packs
+four pixels at a time using SSE2 or NEON. It preserves the existing rounding
+order and stores the remaining pixels individually.
+
 ### License
 
 [MIT license](LICENSE). Bundled dependency licenses remain in their directories.

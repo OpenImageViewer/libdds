@@ -44,6 +44,7 @@ constants retain upstream DDS validation limits. Vendor source formatting is
 preserved apart from CRLF normalization.
 
 - BC7 encoding: align colors for packed-vector loads and define the zero rounding bias at eight-bit precision.
+- RGB/BGR swizzling: use unaligned-safe word copies for serialized pixel storage, including TGA data.
 
 ## Upstream and licenses
 

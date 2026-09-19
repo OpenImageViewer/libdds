@@ -513,37 +513,46 @@ void DirectX::Internal::SwizzleScanline(
     case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
         if (inSize >= 4 && outSize >= 4)
         {
+            // libdds: serialized TGA pixels follow an 18-byte header and can be unaligned.
+            // Fixed-size memcpy keeps these word loads/stores defined without an extra buffer.
             // Swap Red (R) and Blue (B) channels (used to convert from DXGI 1.1 BGR formats to DXGI 1.0 RGB)
             if (pDestination == pSource)
             {
-                auto dPtr = static_cast<uint32_t*>(pDestination);
+                auto dPtr = static_cast<uint8_t*>(pDestination);
                 for (size_t count = 0; count < (outSize - 3); count += 4)
                 {
-                    const uint32_t t = *dPtr;
+                    uint32_t t;
+                    memcpy(&t, dPtr, sizeof(t));
 
                     uint32_t t1 = (t & 0x00ff0000) >> 16;
                     uint32_t t2 = (t & 0x000000ff) << 16;
                     uint32_t t3 = (t & 0x0000ff00);
                     uint32_t ta = (tflags & TEXP_SCANLINE_SETALPHA) ? 0xff000000 : (t & 0xFF000000);
 
-                    *(dPtr++) = t1 | t2 | t3 | ta;
+                    const uint32_t value = t1 | t2 | t3 | ta;
+                    memcpy(dPtr, &value, sizeof(value));
+                    dPtr += sizeof(value);
                 }
             }
             else
             {
-                const uint32_t * __restrict sPtr = static_cast<const uint32_t*>(pSource);
-                uint32_t * __restrict dPtr = static_cast<uint32_t*>(pDestination);
+                const uint8_t * __restrict sPtr = static_cast<const uint8_t*>(pSource);
+                uint8_t * __restrict dPtr = static_cast<uint8_t*>(pDestination);
                 const size_t size = std::min<size_t>(outSize, inSize);
                 for (size_t count = 0; count < (size - 3); count += 4)
                 {
-                    const uint32_t t = *(sPtr++);
+                    uint32_t t;
+                    memcpy(&t, sPtr, sizeof(t));
+                    sPtr += sizeof(t);
 
                     uint32_t t1 = (t & 0x00ff0000) >> 16;
                     uint32_t t2 = (t & 0x000000ff) << 16;
                     uint32_t t3 = (t & 0x0000ff00);
                     uint32_t ta = (tflags & TEXP_SCANLINE_SETALPHA) ? 0xff000000 : (t & 0xFF000000);
 
-                    *(dPtr++) = t1 | t2 | t3 | ta;
+                    const uint32_t value = t1 | t2 | t3 | ta;
+                    memcpy(dPtr, &value, sizeof(value));
+                    dPtr += sizeof(value);
                 }
             }
             return;

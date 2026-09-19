@@ -391,12 +391,15 @@ void DirectX::D3DXDecodeBC4U(XMVECTOR *pColor, const uint8_t *pBC) noexcept
     assert(pColor && pBC);
     static_assert(sizeof(BC4_UNORM) == 8, "BC4_UNORM should be 8 bytes");
 
-    auto pBC4 = reinterpret_cast<const BC4_UNORM*>(pBC);
+    // libdds: copy the encoded word safely before reading its pixels.
+    // DecodeFromIndex retains upstream's interpolation and SNORM endpoint rules.
+    BC4_UNORM block;
+    memcpy(&block, pBC, sizeof(block));
 
     for (size_t i = 0; i < NUM_PIXELS_PER_BLOCK; ++i)
     {
     #pragma prefast(suppress:22103, "writing blocks in two halves confuses tool")
-        pColor[i] = XMVectorSet(pBC4->R(i), 0, 0, 1.0f);
+        pColor[i] = XMVectorSet(block.R(i), 0, 0, 1.0f);
     }
 }
 
@@ -406,12 +409,15 @@ void DirectX::D3DXDecodeBC4S(XMVECTOR *pColor, const uint8_t *pBC) noexcept
     assert(pColor && pBC);
     static_assert(sizeof(BC4_SNORM) == 8, "BC4_SNORM should be 8 bytes");
 
-    auto pBC4 = reinterpret_cast<const BC4_SNORM*>(pBC);
+    // libdds: copy the encoded word safely before reading its pixels.
+    // DecodeFromIndex retains upstream's interpolation and SNORM endpoint rules.
+    BC4_SNORM block;
+    memcpy(&block, pBC, sizeof(block));
 
     for (size_t i = 0; i < NUM_PIXELS_PER_BLOCK; ++i)
     {
     #pragma prefast(suppress:22103, "writing blocks in two halves confuses tool")
-        pColor[i] = XMVectorSet(pBC4->R(i), 0, 0, 1.0f);
+        pColor[i] = XMVectorSet(block.R(i), 0, 0, 1.0f);
     }
 }
 
@@ -467,13 +473,14 @@ void DirectX::D3DXDecodeBC5U(XMVECTOR *pColor, const uint8_t *pBC) noexcept
     assert(pColor && pBC);
     static_assert(sizeof(BC4_UNORM) == 8, "BC4_UNORM should be 8 bytes");
 
-    auto pBCR = reinterpret_cast<const BC4_UNORM*>(pBC);
-    auto pBCG = reinterpret_cast<const BC4_UNORM*>(pBC + sizeof(BC4_UNORM));
+    BC4_UNORM red, green;
+    memcpy(&red, pBC, sizeof(red));
+    memcpy(&green, pBC + sizeof(red), sizeof(green));
 
     for (size_t i = 0; i < NUM_PIXELS_PER_BLOCK; ++i)
     {
     #pragma prefast(suppress:22103, "writing blocks in two halves confuses tool")
-        pColor[i] = XMVectorSet(pBCR->R(i), pBCG->R(i), 0, 1.0f);
+        pColor[i] = XMVectorSet(red.R(i), green.R(i), 0, 1.0f);
     }
 }
 
@@ -483,13 +490,14 @@ void DirectX::D3DXDecodeBC5S(XMVECTOR *pColor, const uint8_t *pBC) noexcept
     assert(pColor && pBC);
     static_assert(sizeof(BC4_SNORM) == 8, "BC4_SNORM should be 8 bytes");
 
-    auto pBCR = reinterpret_cast<const BC4_SNORM*>(pBC);
-    auto pBCG = reinterpret_cast<const BC4_SNORM*>(pBC + sizeof(BC4_SNORM));
+    BC4_SNORM red, green;
+    memcpy(&red, pBC, sizeof(red));
+    memcpy(&green, pBC + sizeof(red), sizeof(green));
 
     for (size_t i = 0; i < NUM_PIXELS_PER_BLOCK; ++i)
     {
     #pragma prefast(suppress:22103, "writing blocks in two halves confuses tool")
-        pColor[i] = XMVectorSet(pBCR->R(i), pBCG->R(i), 0, 1.0f);
+        pColor[i] = XMVectorSet(red.R(i), green.R(i), 0, 1.0f);
     }
 }
 

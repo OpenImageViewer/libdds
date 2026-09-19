@@ -133,6 +133,47 @@ namespace
         }
     }
 
+    void BC45EndpointPairs()
+    {
+        // Every byte endpoint pair, every index and both channels are compared as
+        // floats against upstream, including -128/-127 SNORM and endpoint ordering.
+        for (const auto format :
+             {DXGI_FORMAT_BC4_UNORM, DXGI_FORMAT_BC4_SNORM, DXGI_FORMAT_BC5_UNORM, DXGI_FORMAT_BC5_SNORM})
+        {
+            ScratchImage blocks, decoded;
+            CHECK(SUCCEEDED(blocks.Initialize2D(format, 1024, 1024, 1, 1)));
+            const size_t blockSize = BytesPerBlock(format);
+            for (size_t pair = 0; pair < 65536; ++pair)
+            {
+                auto* block = blocks.GetPixels() + pair * blockSize;
+                for (size_t channel = 0; channel < blockSize / 8; ++channel)
+                {
+                    const uint8_t first  = static_cast<uint8_t>(pair);
+                    const uint8_t second = static_cast<uint8_t>(pair >> 8);
+                    uint64_t bits        = channel ? uint64_t(second) | (uint64_t(first) << 8)
+                                                   : uint64_t(first) | (uint64_t(second) << 8);
+                    for (size_t pixel = 0; pixel < 16; ++pixel)
+                        bits |= uint64_t((pixel + channel * 3) % 8) << (16 + pixel * 3);
+                    std::memcpy(block + channel * 8, &bits, sizeof(bits));
+                }
+            }
+            CHECK(SUCCEEDED(Decompress(*blocks.GetImages(), DXGI_FORMAT_R32G32B32A32_FLOAT, decoded)));
+            Record(decoded);
+#ifndef LIBDDS_REFERENCE
+            // DDS DX10 payloads need not have eight-byte alignment.
+            alignas(16) std::array<uint8_t, 17> unaligned{};
+            std::memcpy(unaligned.data() + 1, blocks.GetPixels() + 32768 * blockSize, blockSize);
+            const Image source{4, 4, format, blockSize, blockSize, unaligned.data() + 1};
+            ScratchImage small;
+            CHECK(SUCCEEDED(Decompress(source, DXGI_FORMAT_R32G32B32A32_FLOAT, small)));
+            const auto* expected = decoded.GetImage(0, 0, 0);
+            for (size_t row = 0; row < 4; ++row)
+                CHECK(std::memcmp(small.GetPixels() + row * 64, expected->pixels + (512 + row) * expected->rowPitch,
+                                  64) == 0);
+#endif
+        }
+    }
+
     void Containers()
     {
         for (int kind = 0; kind < 4; ++kind)
@@ -480,6 +521,7 @@ int main(int argc, char** argv)
         }
         KnownBlocks();
         BCFormats();
+        BC45EndpointPairs();
         Containers();
         UpstreamValidation();
         PitchBounds();

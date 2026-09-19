@@ -800,6 +800,12 @@ namespace DirectX
         float            threshold;
     };
 
+    // libdds: CPU conversion into non-overlapping caller-owned storage. Formats
+    // must differ; packed/planar/palettized/typeless and sub-byte formats are excluded.
+    // Pitches and natural alignment are validated before any output is written.
+    DIRECTX_TEX_API HRESULT __cdecl Convert(
+        const Image& source, const Image& destination, TEX_FILTER_FLAGS filter, float threshold) noexcept;
+
     DIRECTX_TEX_API HRESULT __cdecl Convert(
         _In_ const Image& srcImage, _In_ DXGI_FORMAT format, _In_ TEX_FILTER_FLAGS filter, _In_ float threshold,
         _Out_ ScratchImage& image) noexcept;

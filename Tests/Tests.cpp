@@ -508,6 +508,55 @@ namespace
         std::filesystem::remove(path);
     }
 
+    void ConversionDestinationBuffers()
+    {
+        for (const auto format : {DXGI_FORMAT_B8G8R8X8_UNORM, DXGI_FORMAT_B8G8R8X8_UNORM_SRGB,
+                                  DXGI_FORMAT_B5G5R5A1_UNORM, DXGI_FORMAT_B4G4R4A4_UNORM})
+        for (const auto filter : {TEX_FILTER_DEFAULT, TEX_FILTER_SRGB_IN, TEX_FILTER_SRGB_OUT, TEX_FILTER_DITHER, TEX_FILTER_DITHER_DIFFUSION})
+        {
+            ScratchImage input, expected;
+            CHECK(SUCCEEDED(input.Initialize2D(format, 17, 7, 1, 1)));
+            for (size_t i = 0; i < input.GetPixelsSize(); ++i) input.GetPixels()[i] = static_cast<uint8_t>(i * 73 + 11);
+            const auto source = *input.GetImages();
+            CHECK(SUCCEEDED(Convert(source, DXGI_FORMAT_R8G8B8A8_UNORM, filter, .5f, expected)));
+            std::vector<uint8_t> storage(16 + 80 * 7 + 16, 0xa5);
+            Image destination{17, 7, DXGI_FORMAT_R8G8B8A8_UNORM, 80, 80 * 7, storage.data() + 16};
+            CHECK(SUCCEEDED(Convert(source, destination, filter, .5f)));
+            for (size_t row = 0; row < 7; ++row)
+            {
+                CHECK(std::memcmp(destination.pixels + row * 80, expected.GetPixels() + row * 68, 68) == 0);
+                CHECK(std::all_of(destination.pixels + row * 80 + 68, destination.pixels + (row + 1) * 80,
+                                  [](uint8_t value) { return value == 0xa5; }));
+            }
+            CHECK(std::all_of(storage.begin(), storage.begin() + 16, [](uint8_t value) { return value == 0xa5; }));
+            CHECK(std::all_of(storage.end() - 16, storage.end(), [](uint8_t value) { return value == 0xa5; }));
+            const auto unchanged = storage;
+            for (int failure = 0; failure < 13; ++failure)
+            {
+                auto bad = destination;
+                auto badSource = source;
+                switch (failure)
+                {
+                case 0: bad.rowPitch = 64; break;
+                case 1: --bad.slicePitch; break;
+                case 2: bad.width = 16; break;
+                case 3: ++bad.pixels; break;
+                case 4: bad.pixels = nullptr; break;
+                case 5: bad.pixels = source.pixels; break;
+                case 6: --badSource.rowPitch; break;
+                case 7: badSource.slicePitch = 1; break;
+                case 8: ++badSource.pixels; break;
+                case 9: bad.format = DXGI_FORMAT_BC1_UNORM; break;
+                case 10: bad.rowPitch = SIZE_MAX; break;
+                case 11: badSource.slicePitch = SIZE_MAX; break;
+                case 12: bad.slicePitch = SIZE_MAX; break;
+                }
+                CHECK(FAILED(Convert(badSource, bad, filter, .5f)));
+                CHECK(storage == unchanged);
+            }
+        }
+    }
+
     void DestinationBuffers()
     {
         auto input = ColorImage(5, 7);
@@ -590,6 +639,7 @@ int main(int argc, char** argv)
         UnalignedDDSHeaders();
         DDS24BitBounds();
         DestinationBuffers();
+        ConversionDestinationBuffers();
 #endif
         if (snapshot.is_open())
         {

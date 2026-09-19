@@ -5562,3 +5562,41 @@ DirectX::FORMAT_TYPE DirectX::FormatDataType(_In_ DXGI_FORMAT fmt) noexcept
         return FORMAT_TYPE_TYPELESS;
     }
 }
+
+// libdds: reuse the upstream CPU conversion with validated caller-owned output.
+HRESULT DirectX::Convert(const Image& source, const Image& destination, TEX_FILTER_FLAGS filter, float threshold) noexcept
+{
+    if (!source.pixels || !destination.pixels)
+        return E_POINTER;
+    if (!source.width || !source.height || source.width > UINT32_MAX || source.height > UINT32_MAX
+        || source.width != destination.width || source.height != destination.height
+        || source.format == destination.format || !IsValid(source.format) || !IsValid(destination.format))
+        return E_INVALIDARG;
+    for (const Image* img : { &source, &destination })
+    {
+        if (IsCompressed(img->format) || IsPlanar(img->format) || IsPalettized(img->format)
+            || IsTypeless(img->format) || IsPacked(img->format) || BitsPerPixel(img->format) < 8)
+            return HRESULT_E_NOT_SUPPORTED;
+        if (img->slicePitch > UINTPTR_MAX - reinterpret_cast<uintptr_t>(img->pixels))
+            return E_INVALIDARG;
+        const size_t pixelBytes = BitsPerPixel(img->format) / 8;
+        const size_t alignment = std::min<size_t>(8, pixelBytes & (~pixelBytes + 1));
+        if ((reinterpret_cast<uintptr_t>(img->pixels) % alignment) || (img->rowPitch % alignment))
+            return E_INVALIDARG;
+        size_t rowPitch = 0, slicePitch = 0;
+        const HRESULT hr = ComputePitch(img->format, img->width, img->height, rowPitch, slicePitch);
+        if (FAILED(hr))
+            return hr;
+        if (img->rowPitch < rowPitch || img->rowPitch > SIZE_MAX / img->height
+            || img->slicePitch < img->rowPitch * img->height)
+            return E_INVALIDARG;
+    }
+    const auto src = reinterpret_cast<uintptr_t>(source.pixels);
+    const auto dst = reinterpret_cast<uintptr_t>(destination.pixels);
+    if ((src <= dst && dst - src < source.slicePitch) || (dst <= src && src - dst < destination.slicePitch))
+        return E_INVALIDARG;
+    // This overload deliberately has CPU semantics even in builds that enable WIC.
+    if (filter & TEX_FILTER_FORCE_WIC)
+        return HRESULT_E_NOT_SUPPORTED;
+    return ConvertCustom(source, filter, destination, threshold, 0, nullptr);
+}

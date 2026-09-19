@@ -19,6 +19,10 @@ and link `libdds::libdds`. Tests default on for standalone builds and off when
 embedded; `LIBDDS_BUILD_TESTS` controls them explicitly. The library is static
 with position-independent code. OpenMP is not enabled by this build.
 
+Repository CI builds the standalone library on Windows, Linux and macOS for x64
+and ARM64, with a separate Linux ASan/UBSan job. CI targets do not imply that every
+platform has been exercised locally.
+
 ## API and behavior
 
 Include `DirectXTex.h`. The CPU API keeps `HRESULT` return codes, `DXGI_FORMAT`,

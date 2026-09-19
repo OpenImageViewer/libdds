@@ -14,7 +14,9 @@
 using namespace DirectX;
 using namespace DirectX::Internal;
 using namespace DirectX::PackedVector;
+#if !defined(LIBDDS_CPU_ONLY)
 using Microsoft::WRL::ComPtr;
+#endif
 
 namespace
 {
@@ -4578,7 +4580,7 @@ namespace
         _Out_ WICPixelFormatGUID& pfGUID,
         _Out_ WICPixelFormatGUID& targetGUID) noexcept
     {
-    #ifndef _WIN32
+    #if !defined(_WIN32) || defined(LIBDDS_CPU_ONLY)
         UNREFERENCED_PARAMETER(filter);
         UNREFERENCED_PARAMETER(sformat);
         UNREFERENCED_PARAMETER(tformat);
@@ -4741,7 +4743,7 @@ namespace
         _In_ float threshold,
         _In_ const Image& destImage)
     {
-    #ifndef _WIN32
+    #if !defined(_WIN32) || defined(LIBDDS_CPU_ONLY)
         UNREFERENCED_PARAMETER(srcImage);
         UNREFERENCED_PARAMETER(pfGUID);
         UNREFERENCED_PARAMETER(targetGUID);

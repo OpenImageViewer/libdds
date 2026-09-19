@@ -86,61 +86,18 @@
 #pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
 #endif
 
-#ifdef _WIN32
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
+#include "DirectXTexPortable.h"
+
+// DDS validation retains upstream's default resource limits without D3D headers.
+#ifndef D3D12_REQ_MIP_LEVELS
+    #define D3D12_REQ_MIP_LEVELS 15
+    #define D3D12_REQ_TEXTURE1D_ARRAY_AXIS_DIMENSION 2048
+    #define D3D12_REQ_TEXTURE1D_U_DIMENSION 16384
+    #define D3D12_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION 2048
+    #define D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION 16384
+    #define D3D12_REQ_TEXTURE3D_U_V_OR_W_DIMENSION 2048
 #endif
 
-#pragma warning(push)
-#pragma warning(disable : 4005)
-#define NOMINMAX 1
-#define NODRAWTEXT
-#define NOGDI
-#define NOBITMAP
-#define NOMCX
-#define NOSERVICE
-#define NOHELP
-#pragma warning(pop)
-
-#include <Windows.h>
-
-#ifdef __MINGW32__
-#include <unknwn.h>
-#endif
-
-#ifndef _WIN32_WINNT_WIN10
-#define _WIN32_WINNT_WIN10 0x0A00
-#endif
-
-#ifdef _GAMING_XBOX_SCARLETT
-#pragma warning(push)
-#pragma warning(disable: 5204 5249)
-#include <d3d12_xs.h>
-#pragma warning(pop)
-#elif defined(_GAMING_XBOX)
-#pragma warning(push)
-#pragma warning(disable: 5204)
-#include <d3d12_x.h>
-#pragma warning(pop)
-#elif defined(_XBOX_ONE) && defined(_TITLE)
-#include <d3d12_x.h>
-#include <d3d11_x.h>
-#elif (_WIN32_WINNT >= _WIN32_WINNT_WIN10)
-#ifdef USING_DIRECTX_HEADERS
-#include <directx/dxgiformat.h>
-#include <directx/d3d12.h>
-#else
-#include <d3d12.h>
-#endif
-#include <d3d11_4.h>
-#else
-#include <d3d11_2.h>
-#endif
-#else // !WIN32
-#include <wsl/winadapter.h>
-#include <wsl/wrladapter.h>
-#include <directx/d3d12.h>
-#endif
 
 #include <algorithm>
 #include <cassert>
@@ -169,7 +126,7 @@
 
 #include "DirectXTex.h"
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
 #include <malloc.h>
 
 #if defined(NTDDI_WIN10_FE) || defined(__MINGW32__)
@@ -240,7 +197,7 @@ namespace DirectX
     {
         //-----------------------------------------------------------------------------
         // WIC helper functions
-    #ifdef _WIN32
+    #if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
         DXGI_FORMAT __cdecl WICToDXGI(_In_ const GUID& guid) noexcept;
         bool __cdecl DXGIToWIC(_In_ DXGI_FORMAT format, _Out_ GUID& guid, _In_ bool ignoreRGBvsBGR = false) noexcept;
 
@@ -444,7 +401,7 @@ namespace DirectX
         // Misc helper functions
         bool __cdecl IsAlphaAllOpaqueBC(_In_ const Image& cImage) noexcept;
 
-    #ifdef _WIN32
+    #if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
         HRESULT __cdecl ResizeSeparateColorAndAlpha(_In_ IWICImagingFactory* pWIC,
             _In_ bool iswic2,
             _In_ IWICBitmap* original,

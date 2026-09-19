@@ -15,11 +15,13 @@
 
 using namespace DirectX;
 using namespace DirectX::Internal;
+#if !defined(LIBDDS_CPU_ONLY)
 using Microsoft::WRL::ComPtr;
+#endif
 
 namespace
 {
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
     //--- Do image resize using WIC ---
     HRESULT PerformResizeUsingWIC(
         const Image& srcImage,
@@ -876,7 +878,7 @@ HRESULT DirectX::Resize(
         return HRESULT_E_NOT_SUPPORTED;
     }
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
     bool usewic = UseWICFiltering(srcImage.format, filter);
 
     WICPixelFormatGUID pfGUID = {};
@@ -905,7 +907,7 @@ HRESULT DirectX::Resize(
     if (!rimage)
         return E_POINTER;
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
     if (usewic)
     {
         if (wicpf)
@@ -965,7 +967,7 @@ HRESULT DirectX::Resize(
     if (FAILED(hr))
         return hr;
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
     bool usewic = !metadata.IsPMAlpha() && UseWICFiltering(metadata.format, filter);
 
     WICPixelFormatGUID pfGUID = {};
@@ -1021,7 +1023,7 @@ HRESULT DirectX::Resize(
                 return E_FAIL;
             }
 
-        #ifdef _WIN32
+        #if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
             if (usewic)
             {
                 if (wicpf)
@@ -1082,7 +1084,7 @@ HRESULT DirectX::Resize(
                 return E_FAIL;
             }
 
-        #ifdef _WIN32
+        #if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
             if (usewic)
             {
                 if (wicpf)

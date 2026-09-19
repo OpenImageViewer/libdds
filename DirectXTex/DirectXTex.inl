@@ -267,7 +267,7 @@ inline HRESULT __cdecl EncodeDDSHeader(const TexMetadata& metadata, DDS_FLAGS fl
     return EncodeDDSHeader(metadata, flags, static_cast<uint8_t*>(nullptr), maxsize, required);
 }
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
 _Use_decl_annotations_
 inline HRESULT __cdecl GetMetadataFromWICMemory(const std::byte* pSource, size_t size, WIC_FLAGS flags, TexMetadata& metadata, std::function<void __cdecl(IWICMetadataQueryReader*)> getMQR)
 {

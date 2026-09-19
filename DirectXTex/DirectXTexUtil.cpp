@@ -32,11 +32,13 @@ static_assert(WIN11_DXGI_FORMAT_A4B4G4R4_UNORM == DXGI_FORMAT_A4B4G4R4_UNORM, "W
 #endif
 
 using namespace DirectX;
+#if !defined(LIBDDS_CPU_ONLY)
 using Microsoft::WRL::ComPtr;
+#endif
 
 namespace
 {
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
     //-------------------------------------------------------------------------------------
     // WIC Pixel Format Translation Data
     //-------------------------------------------------------------------------------------
@@ -114,7 +116,7 @@ namespace
         }
     }
 
-#else // !WIN32
+#elif !defined(_WIN32) // !WIN32
     inline void * _aligned_malloc(size_t size, size_t alignment)
     {
         size = (size + alignment - 1) & ~(alignment - 1);
@@ -126,7 +128,7 @@ namespace
 }
 
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
 //=====================================================================================
 // WIC Utilities
 //=====================================================================================

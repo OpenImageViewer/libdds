@@ -17,26 +17,11 @@
 #include <utility>
 #include <vector>
 
-#ifdef _WIN32
-#if !defined(__d3d11_h__) && !defined(__d3d11_x_h__) && !defined(__d3d12_h__) && !defined(__d3d12_x_h__) && !defined(__XBOX_D3D12_X__)
-#ifdef _GAMING_XBOX_SCARLETT
-#include <d3d12_xs.h>
-#elif defined(_GAMING_XBOX)
-#include <d3d12_x.h>
-#elif defined(_XBOX_ONE) && defined(_TITLE)
-#include <d3d11_x.h>
-#else
-#include <d3d11_1.h>
-#endif
-#endif
-#else // !WIN32
-#include <directx/dxgiformat.h>
-#include <wsl/winadapter.h>
-#endif
+#include "DirectXTexPortable.h"
 
 #include <DirectXMath.h>
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
 #if defined(NTDDI_WIN10_FE) || defined(__MINGW32__)
 #include <ocidl.h>
 #else
@@ -382,7 +367,7 @@ namespace DirectX
         _In_ TGA_FLAGS flags,
         _Out_ TexMetadata& metadata) noexcept;
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
     DIRECTX_TEX_API HRESULT __cdecl GetMetadataFromWICMemory(
         _In_reads_bytes_(size) const uint8_t* pSource, _In_ size_t size,
         _In_ WIC_FLAGS flags,
@@ -422,7 +407,7 @@ namespace DirectX
         _In_ TGA_FLAGS flags,
         _Out_ TexMetadata& metadata) noexcept;
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
     DIRECTX_TEX_API HRESULT __cdecl GetMetadataFromWICMemory(
         _In_reads_bytes_(size) const std::byte* pSource, _In_ size_t size,
         _In_ WIC_FLAGS flags,
@@ -646,7 +631,7 @@ namespace DirectX
         _In_z_ const wchar_t* szFile, _In_opt_ const TexMetadata* metadata = nullptr) noexcept;
 
     // WIC operations
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
     DIRECTX_TEX_API HRESULT __cdecl LoadFromWICMemory(
         _In_reads_bytes_(size) const uint8_t* pSource, _In_ size_t size,
         _In_ WIC_FLAGS flags,
@@ -708,7 +693,7 @@ namespace DirectX
         _In_ TGA_FLAGS flags,
         _Out_opt_ TexMetadata* metadata, _Out_ ScratchImage& image) noexcept;
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
     DIRECTX_TEX_API HRESULT __cdecl LoadFromWICMemory(
         _In_reads_bytes_(size) const std::byte* pSource, _In_ size_t size,
         _In_ WIC_FLAGS flags,
@@ -730,7 +715,7 @@ namespace DirectX
         TEX_FR_FLIP_VERTICAL = 0x10,
     };
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
     DIRECTX_TEX_API HRESULT __cdecl FlipRotate(_In_ const Image& srcImage, _In_ TEX_FR_FLAGS flags, _Out_ ScratchImage& image) noexcept;
     DIRECTX_TEX_API HRESULT __cdecl FlipRotate(
         _In_reads_(nimages) const Image* srcImages, _In_ size_t nimages, _In_ const TexMetadata& metadata,
@@ -943,7 +928,7 @@ namespace DirectX
         _In_ DXGI_FORMAT format, _In_ const CompressOptions& options, _Out_ ScratchImage& cImages,
         _In_ std::function<bool __cdecl(size_t, size_t)> statusCallBack = nullptr);
 
-#if defined(__d3d11_h__) || defined(__d3d11_x_h__)
+#if !defined(LIBDDS_CPU_ONLY) && (defined(__d3d11_h__) || defined(__d3d11_x_h__))
     DIRECTX_TEX_API HRESULT __cdecl Compress(
         _In_ ID3D11Device* pDevice, _In_ const Image& srcImage, _In_ DXGI_FORMAT format, _In_ TEX_COMPRESS_FLAGS compress,
         _In_ float alphaWeight, _Out_ ScratchImage& image) noexcept;
@@ -1060,7 +1045,7 @@ namespace DirectX
 
     //---------------------------------------------------------------------------------
     // WIC utility code
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(LIBDDS_CPU_ONLY)
     enum WICCodecs : uint32_t
     {
         WIC_CODEC_BMP = 1,          // Windows Bitmap (.bmp)
@@ -1109,7 +1094,7 @@ namespace DirectX
     };
 
     // Direct3D 11 functions
-#if defined(__d3d11_h__) || defined(__d3d11_x_h__)
+#if !defined(LIBDDS_CPU_ONLY) && (defined(__d3d11_h__) || defined(__d3d11_x_h__))
     DIRECTX_TEX_API bool __cdecl IsSupportedTexture(_In_ ID3D11Device* pDevice, _In_ const TexMetadata& metadata) noexcept;
 
     DIRECTX_TEX_API HRESULT __cdecl CreateTexture(
@@ -1134,7 +1119,7 @@ namespace DirectX
 #endif
 
     // Direct3D 12 functions
-#if defined(__d3d12_h__) || defined(__d3d12_x_h__) || defined(__XBOX_D3D12_X__)
+#if !defined(LIBDDS_CPU_ONLY) && (defined(__d3d12_h__) || defined(__d3d12_x_h__) || defined(__XBOX_D3D12_X__))
     DIRECTX_TEX_API bool __cdecl IsSupportedTexture(_In_ ID3D12Device* pDevice, _In_ const TexMetadata& metadata) noexcept;
 
     DIRECTX_TEX_API HRESULT __cdecl CreateTexture(

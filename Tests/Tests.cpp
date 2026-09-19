@@ -465,6 +465,132 @@ namespace
             std::filesystem::remove(p);
     }
 #ifndef LIBDDS_REFERENCE
+    void DDSMemoryViews()
+    {
+        for (const auto format :
+             {DXGI_FORMAT_BC1_UNORM, DXGI_FORMAT_BC3_UNORM, DXGI_FORMAT_BC4_UNORM, DXGI_FORMAT_BC4_SNORM,
+              DXGI_FORMAT_BC5_UNORM, DXGI_FORMAT_BC5_SNORM, DXGI_FORMAT_BC6H_UF16, DXGI_FORMAT_BC6H_SF16,
+              DXGI_FORMAT_BC7_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8_UNORM,
+              DXGI_FORMAT_R32G32B32_FLOAT})
+        {
+            for (int kind = 0; kind < 3; ++kind)
+            {
+                ScratchImage input, owned;
+                if (kind == 0)
+                    CHECK(SUCCEEDED(input.Initialize2D(format, 8, 4, 2, 3)));
+                else if (kind == 1)
+                    CHECK(SUCCEEDED(input.InitializeCube(format, 4, 4, 1, 3)));
+                else
+                    CHECK(SUCCEEDED(input.Initialize3D(format, 8, 4, 4, 3)));
+                for (size_t i = 0; i < input.GetPixelsSize(); ++i)
+                    input.GetPixels()[i] = static_cast<uint8_t>(i * 17 + i / 64);
+                if (format == DXGI_FORMAT_BC7_UNORM || format == DXGI_FORMAT_BC6H_UF16 ||
+                    format == DXGI_FORMAT_BC6H_SF16)
+                {
+                    for (size_t i = 0; i < input.GetPixelsSize(); i += 16)
+                        input.GetPixels()[i] = format == DXGI_FORMAT_BC7_UNORM ? 0x40 : (input.GetPixels()[i] & 0xfc);
+                }
+                for (const auto flags : {DDS_FLAGS_NONE, DDS_FLAGS_FORCE_DX10_EXT})
+                {
+                    Blob blob;
+                    CHECK(SUCCEEDED(
+                        SaveToDDSMemory(input.GetImages(), input.GetImageCount(), input.GetMetadata(), flags, blob)));
+                    const std::vector<uint8_t> before(blob.GetBufferPointer(),
+                                                      blob.GetBufferPointer() + blob.GetBufferSize());
+                    std::vector<Image> views;
+                    TexMetadata metadata{};
+                    CHECK(GetDDSImageViewsFromMemory(blob.GetBufferPointer(), blob.GetBufferSize(), DDS_FLAGS_NONE,
+                                                     metadata, views) == S_OK);
+                    CHECK(SUCCEEDED(LoadFromDDSMemory(blob.GetBufferPointer(), blob.GetBufferSize(), DDS_FLAGS_NONE,
+                                                      nullptr, owned)));
+                    CHECK(views.size() == owned.GetImageCount());
+                    CHECK(metadata.mipLevels == owned.GetMetadata().mipLevels &&
+                          metadata.arraySize == owned.GetMetadata().arraySize);
+                    CHECK(metadata.depth == owned.GetMetadata().depth &&
+                          metadata.dimension == owned.GetMetadata().dimension);
+                    for (size_t i = 0; i < views.size(); ++i)
+                    {
+                        const auto& view = views[i];
+                        const auto& copy = owned.GetImages()[i];
+                        CHECK(view.pixels >= blob.GetBufferPointer() &&
+                              view.pixels + view.slicePitch <= blob.GetBufferPointer() + blob.GetBufferSize());
+                        CHECK(view.width == copy.width && view.height == copy.height && view.format == copy.format);
+                        CHECK(view.rowPitch == copy.rowPitch && view.slicePitch == copy.slicePitch);
+                        CHECK(std::memcmp(view.pixels, copy.pixels, view.slicePitch) == 0);
+                    }
+                    if (IsCompressed(format))
+                    {
+                        ScratchImage borrowedPixels, ownedPixels;
+                        CHECK(SUCCEEDED(Decompress(views[0], DXGI_FORMAT_UNKNOWN, borrowedPixels)));
+                        CHECK(SUCCEEDED(Decompress(owned.GetImages()[0], DXGI_FORMAT_UNKNOWN, ownedPixels)));
+                        Equal(borrowedPixels, ownedPixels);
+                    }
+                    CHECK(std::memcmp(before.data(), blob.GetBufferPointer(), before.size()) == 0);
+                    CHECK(FAILED(GetDDSImageViewsFromMemory(blob.GetBufferPointer(), blob.GetBufferSize() - 1,
+                                                            DDS_FLAGS_NONE, metadata, views)));
+                    CHECK(views.empty() && metadata.width == 0);
+                }
+            }
+        }
+        ScratchImage input, owned;
+        CHECK(SUCCEEDED(input.Initialize2D(DXGI_FORMAT_R8G8B8A8_UNORM, 4, 4, 1, 3)));
+        Blob blob;
+        CHECK(SUCCEEDED(SaveToDDSMemory(input.GetImages(), input.GetImageCount(), input.GetMetadata(),
+                                        DDS_FLAGS_FORCE_DX10_EXT, blob)));
+        std::vector<Image> views;
+        TexMetadata metadata{};
+        CHECK(GetDDSImageViewsFromMemory(blob.GetBufferPointer(), 148 + 64, DDS_FLAGS_IGNORE_MIPS, metadata, views) ==
+              S_OK);
+        CHECK(views.size() == 1 && metadata.mipLevels == 1);
+        for (const auto flags :
+             {DDS_FLAGS_LEGACY_DWORD, DDS_FLAGS_BAD_DXTN_TAILS, DDS_FLAGS_PERMISSIVE, DDS_FLAGS_ALLOW_LARGE_FILES})
+        {
+            CHECK(GetDDSImageViewsFromMemory(blob.GetBufferPointer(), blob.GetBufferSize(), flags, metadata, views) ==
+                  S_FALSE);
+            CHECK(views.empty() && metadata.width == 0);
+        }
+        std::vector<uint8_t> unaligned(blob.GetBufferSize() + 1);
+        std::memcpy(unaligned.data() + 1, blob.GetBufferPointer(), blob.GetBufferSize());
+        CHECK(GetDDSImageViewsFromMemory(unaligned.data() + 1, blob.GetBufferSize(), DDS_FLAGS_NONE, metadata, views) ==
+              S_FALSE);
+        CHECK(SUCCEEDED(LoadFromDDSMemory(unaligned.data() + 1, blob.GetBufferSize(), DDS_FLAGS_NONE, nullptr, owned)));
+        Equal(input, owned);
+        CHECK(FAILED(GetDDSImageViewsFromMemory(nullptr, 0, DDS_FLAGS_NONE, metadata, views)));
+        for (size_t length = 0; length < 148; ++length)
+        {
+            CHECK(FAILED(GetDDSImageViewsFromMemory(blob.GetBufferPointer(), length, DDS_FLAGS_NONE, metadata, views)));
+            CHECK(views.empty() && metadata.width == 0);
+        }
+        const std::vector<uint8_t> valid(blob.GetBufferPointer(), blob.GetBufferPointer() + blob.GetBufferSize());
+        for (const auto field : {std::pair<size_t, uint32_t>{0, 0}, {12, 0}, {16, 0}, {28, 99}, {132, 0}})
+        {
+            std::memcpy(blob.GetBufferPointer(), valid.data(), valid.size());
+            std::memcpy(blob.GetBufferPointer() + field.first, &field.second, sizeof(field.second));
+            CHECK(FAILED(GetDDSImageViewsFromMemory(blob.GetBufferPointer(), blob.GetBufferSize(), DDS_FLAGS_NONE,
+                                                    metadata, views)));
+            CHECK(views.empty() && metadata.width == 0);
+        }
+        for (const auto format : {DXGI_FORMAT_NV12, DXGI_FORMAT_YUY2})
+        {
+            CHECK(SUCCEEDED(input.Initialize2D(format, 4, 4, 1, 1)));
+            CHECK(SUCCEEDED(SaveToDDSMemory(*input.GetImages(), DDS_FLAGS_FORCE_DX10_EXT, blob)));
+            CHECK(GetDDSImageViewsFromMemory(blob.GetBufferPointer(), blob.GetBufferSize(), DDS_FLAGS_NONE, metadata,
+                                             views) == S_FALSE);
+            CHECK(SUCCEEDED(
+                LoadFromDDSMemory(blob.GetBufferPointer(), blob.GetBufferSize(), DDS_FLAGS_NONE, nullptr, owned)));
+            Equal(input, owned);
+        }
+        CHECK(SUCCEEDED(input.Initialize2D(DXGI_FORMAT_R16G16B16A16_UNORM, 4, 4, 1, 1)));
+        CHECK(SUCCEEDED(SaveToDDSMemory(*input.GetImages(), DDS_FLAGS_FORCE_DX10_EXT, blob)));
+        CHECK(GetDDSImageViewsFromMemory(blob.GetBufferPointer(), blob.GetBufferSize(), DDS_FLAGS_NONE, metadata,
+                                         views) == S_FALSE);
+        CHECK(SUCCEEDED(input.Initialize2D(DXGI_FORMAT_B8G8R8X8_UNORM, 3, 2, 1, 1)));
+        CHECK(SUCCEEDED(SaveToDDSMemory(*input.GetImages(), DDS_FLAGS_FORCE_24BPP_RGB, blob)));
+        CHECK(GetDDSImageViewsFromMemory(blob.GetBufferPointer(), blob.GetBufferSize(), DDS_FLAGS_NONE, metadata,
+                                         views) == S_FALSE);
+        CHECK(SUCCEEDED(
+            LoadFromDDSMemory(blob.GetBufferPointer(), blob.GetBufferSize(), DDS_FLAGS_NONE, nullptr, owned)));
+    }
 
     void DDS24BitBounds()
     {
@@ -600,21 +726,6 @@ namespace
         CHECK(FAILED(Decompress(source, destination)));
     }
 #endif
-
-#ifndef LIBDDS_REFERENCE
-    void UnalignedDDSHeaders()
-    {
-        ScratchImage input, owned;
-        CHECK(SUCCEEDED(input.Initialize2D(DXGI_FORMAT_R8G8B8A8_UNORM, 4, 4, 1, 3)));
-        Blob blob;
-        CHECK(SUCCEEDED(SaveToDDSMemory(input.GetImages(), input.GetImageCount(), input.GetMetadata(),
-                                        DDS_FLAGS_FORCE_DX10_EXT, blob)));
-        std::vector<uint8_t> unaligned(blob.GetBufferSize() + 1);
-        std::memcpy(unaligned.data() + 1, blob.GetBufferPointer(), blob.GetBufferSize());
-        CHECK(SUCCEEDED(LoadFromDDSMemory(unaligned.data() + 1, blob.GetBufferSize(), DDS_FLAGS_NONE, nullptr, owned)));
-        Equal(input, owned);
-    }
-#endif
 }  // namespace
 int main(int argc, char** argv)
 {
@@ -636,7 +747,7 @@ int main(int argc, char** argv)
         Processing();
         OtherFormatsAndFiles();
 #ifndef LIBDDS_REFERENCE
-        UnalignedDDSHeaders();
+        DDSMemoryViews();
         DDS24BitBounds();
         DestinationBuffers();
         ConversionDestinationBuffers();

@@ -296,8 +296,8 @@ ScratchImage& ScratchImage::operator= (ScratchImage&& moveFrom) noexcept
 //-------------------------------------------------------------------------------------
 // Methods
 //-------------------------------------------------------------------------------------
-_Use_decl_annotations_
-HRESULT ScratchImage::Initialize(const TexMetadata& mdata, CP_FLAGS flags) noexcept
+// libdds: validate layout metadata without allocating pixel storage.
+HRESULT DirectX::Internal::ValidateImageMetadata(const TexMetadata& mdata, size_t& mipLevels) noexcept
 {
     if (!IsValid(mdata.format))
         return E_INVALIDARG;
@@ -305,7 +305,7 @@ HRESULT ScratchImage::Initialize(const TexMetadata& mdata, CP_FLAGS flags) noexc
     if (IsPalettized(mdata.format))
         return HRESULT_E_NOT_SUPPORTED;
 
-    size_t mipLevels = mdata.mipLevels;
+    mipLevels = mdata.mipLevels;
 
     switch (mdata.dimension)
     {
@@ -343,6 +343,17 @@ HRESULT ScratchImage::Initialize(const TexMetadata& mdata, CP_FLAGS flags) noexc
         return HRESULT_E_NOT_SUPPORTED;
     }
 
+    return S_OK;
+}
+
+_Use_decl_annotations_
+HRESULT ScratchImage::Initialize(const TexMetadata& mdata, CP_FLAGS flags) noexcept
+{
+    size_t mipLevels;
+    HRESULT hr = ValidateImageMetadata(mdata, mipLevels);
+    if (FAILED(hr))
+        return hr;
+
     Release();
 
     m_metadata.width = mdata.width;
@@ -356,7 +367,7 @@ HRESULT ScratchImage::Initialize(const TexMetadata& mdata, CP_FLAGS flags) noexc
     m_metadata.dimension = mdata.dimension;
 
     size_t pixelSize, nimages;
-    HRESULT hr = DetermineImageArray(m_metadata, flags, nimages, pixelSize);
+    hr = DetermineImageArray(m_metadata, flags, nimages, pixelSize);
     if (FAILED(hr))
         return hr;
 

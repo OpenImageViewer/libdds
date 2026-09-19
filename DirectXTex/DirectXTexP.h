@@ -286,6 +286,8 @@ namespace DirectX
 
         //---------------------------------------------------------------------------------
         // Image helper functions
+        HRESULT __cdecl ValidateImageMetadata(const TexMetadata& metadata, size_t& mipLevels) noexcept;
+
         HRESULT __cdecl DetermineImageArray(
             _In_ const TexMetadata& metadata, _In_ CP_FLAGS cpFlags,
             _Out_ size_t& nImages, _Out_ size_t& pixelSize) noexcept;

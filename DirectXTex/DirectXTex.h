@@ -566,6 +566,17 @@ namespace DirectX
     // Image I/O
 
     // DDS operations
+    // libdds: validated non-owning source images in TexMetadata::ComputeIndex order.
+    // S_OK borrows the input bytes; keep them alive and unchanged while using the views.
+    // Image::pixels has upstream's mutable type, but these views are READ-ONLY: never
+    // write to or free their pixels. Only the vector's descriptors are owned.
+    // S_FALSE requests the owning loader for fixups, relaxed limits, packed/planar
+    // layouts or alignment.
+    // Metadata and views are cleared unless the result is S_OK.
+    DIRECTX_TEX_API HRESULT __cdecl GetDDSImageViewsFromMemory(
+        _In_reads_bytes_(size) const uint8_t* pSource, _In_ size_t size, _In_ DDS_FLAGS flags,
+        _Out_ TexMetadata& metadata, _Out_ std::vector<Image>& images) noexcept;
+
     DIRECTX_TEX_API HRESULT __cdecl LoadFromDDSMemory(
         _In_reads_bytes_(size) const uint8_t* pSource, _In_ size_t size,
         _In_ DDS_FLAGS flags,

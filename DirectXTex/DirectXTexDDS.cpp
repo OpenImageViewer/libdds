@@ -2020,6 +2020,76 @@ HRESULT DirectX::GetMetadataFromDDSFileEx(
 
 
 //-------------------------------------------------------------------------------------
+// libdds: borrow canonical DDS storage after validating its complete image layout.
+// Legacy expansion/swizzling, pitch repair and permissive recovery remain owned loads.
+//-------------------------------------------------------------------------------------
+_Use_decl_annotations_
+HRESULT DirectX::GetDDSImageViewsFromMemory(
+    const uint8_t* pSource, size_t size, DDS_FLAGS flags,
+    TexMetadata& metadata, std::vector<Image>& images) noexcept
+{
+    metadata = {};
+    images.clear();
+    if (!pSource || !size)
+        return E_INVALIDARG;
+
+    TexMetadata mdata;
+    uint32_t convFlags = 0;
+    HRESULT hr = DecodeDDSHeader(pSource, size, flags, mdata, nullptr, convFlags);
+    if (FAILED(hr))
+        return hr;
+
+    // Keep the normal DDS dimension limits for borrowed layouts; the existing
+    // owning path remains responsible for relaxed/large-file loading options.
+    if ((flags & (DDS_FLAGS_LEGACY_DWORD | DDS_FLAGS_BAD_DXTN_TAILS | DDS_FLAGS_PERMISSIVE | DDS_FLAGS_ALLOW_LARGE_FILES))
+        || (convFlags & ~CONV_FLAGS_DX10) || IsPacked(mdata.format) || IsPlanar(mdata.format))
+        return S_FALSE;
+
+    size_t mipLevels;
+    hr = ValidateImageMetadata(mdata, mipLevels);
+    if (FAILED(hr))
+        return hr;
+    mdata.mipLevels = mipLevels;
+
+    const size_t offset = (convFlags & CONV_FLAGS_DX10) ? DDS_DX10_HEADER_SIZE : DDS_MIN_HEADER_SIZE;
+    size_t nimages = 0, pixelSize = 0;
+    hr = DetermineImageArray(mdata, CP_FLAGS_NONE, nimages, pixelSize);
+    if (FAILED(hr))
+        return hr;
+    if (!nimages || !pixelSize || offset > size || pixelSize > size - offset)
+        return HRESULT_E_HANDLE_EOF;
+    if (nimages > images.max_size())
+        return HRESULT_E_ARITHMETIC_OVERFLOW;
+
+    // Conservatively preserve packed-load alignment for subsequent CPU operations.
+    // BC4/BC5 copy their encoded words locally, so DX10's four-byte payload alignment
+    // is sufficient for all BC decoders. Ordinary byte copies also remain eligible.
+    const size_t pixelBytes = (BitsPerPixel(mdata.format) + 7) / 8;
+    const size_t alignment = IsCompressed(mdata.format) ? 4
+        : std::min<size_t>(8, pixelBytes & (~pixelBytes + 1));
+    const auto pixels = pSource + offset;
+    if (!alignment || (reinterpret_cast<uintptr_t>(pixels) % alignment))
+        return S_FALSE;
+
+    try
+    {
+        images.resize(nimages);
+    }
+    catch (const std::bad_alloc&)
+    {
+        return E_OUTOFMEMORY;
+    }
+    // SetupImageArray only constructs descriptors; it never changes the source bytes.
+    if (!SetupImageArray(const_cast<uint8_t*>(pixels), pixelSize, mdata, CP_FLAGS_NONE, images.data(), nimages))
+    {
+        images.clear();
+        return E_FAIL;
+    }
+    metadata = mdata;
+    return S_OK;
+}
+
+//-------------------------------------------------------------------------------------
 // Load a DDS file in memory
 //-------------------------------------------------------------------------------------
 _Use_decl_annotations_

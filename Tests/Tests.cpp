@@ -508,6 +508,48 @@ namespace
         std::filesystem::remove(path);
     }
 
+    void DestinationBuffers()
+    {
+        auto input = ColorImage(5, 7);
+        ScratchImage bc, expected;
+        CHECK(SUCCEEDED(Compress(*input.GetImage(0, 0, 0), DXGI_FORMAT_BC3_UNORM, TEX_COMPRESS_DEFAULT, .5f, bc)));
+        auto source = *bc.GetImage(0, 0, 0);
+        CHECK(SUCCEEDED(Decompress(source, DXGI_FORMAT_R8G8B8A8_UNORM, expected)));
+        std::vector<uint8_t> memory(16 + 28 * 7 + 16, 0xa5);
+        Image destination{5, 7, DXGI_FORMAT_R8G8B8A8_UNORM, 28, 28 * 7, memory.data() + 16};
+        CHECK(SUCCEEDED(Decompress(source, destination)));
+        for (size_t row = 0; row < 7; ++row)
+        {
+            CHECK(std::memcmp(destination.pixels + row * 28, expected.GetPixels() + row * 20, 20) == 0);
+            CHECK(std::all_of(destination.pixels + row * 28 + 20, destination.pixels + (row + 1) * 28,
+                              [](uint8_t c) { return c == 0xa5; }));
+        }
+        CHECK(std::all_of(memory.begin(), memory.begin() + 16, [](uint8_t c) { return c == 0xa5; }));
+        CHECK(std::all_of(memory.end() - 16, memory.end(), [](uint8_t c) { return c == 0xa5; }));
+        auto bad     = destination;
+        bad.rowPitch = 19;
+        CHECK(FAILED(Decompress(source, bad)));
+        bad = destination;
+        --bad.slicePitch;
+        CHECK(FAILED(Decompress(source, bad)));
+        bad       = destination;
+        bad.width = 4;
+        CHECK(FAILED(Decompress(source, bad)));
+        bad        = destination;
+        bad.pixels = destination.pixels + 1;
+        CHECK(FAILED(Decompress(source, bad)));
+        bad        = destination;
+        bad.pixels = nullptr;
+        CHECK(FAILED(Decompress(source, bad)));
+        bad        = destination;
+        bad.pixels = source.pixels;
+        CHECK(FAILED(Decompress(source, bad)));
+        bad        = destination;
+        bad.format = DXGI_FORMAT_BC1_UNORM;
+        CHECK(FAILED(Decompress(source, bad)));
+        --source.rowPitch;
+        CHECK(FAILED(Decompress(source, destination)));
+    }
 #endif
 
 #ifndef LIBDDS_REFERENCE
@@ -547,6 +589,7 @@ int main(int argc, char** argv)
 #ifndef LIBDDS_REFERENCE
         UnalignedDDSHeaders();
         DDS24BitBounds();
+        DestinationBuffers();
 #endif
         if (snapshot.is_open())
         {

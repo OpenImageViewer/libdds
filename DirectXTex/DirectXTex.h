@@ -948,6 +948,12 @@ namespace DirectX
 #endif
 
     DIRECTX_TEX_API HRESULT __cdecl Decompress(_In_ const Image& cImage, _In_ DXGI_FORMAT format, _Out_ ScratchImage& image) noexcept;
+
+    // libdds extension: decode into caller-owned, non-overlapping pixel storage.
+    // Pitches and slice sizes must describe the complete source and destination images.
+    // Destination pixels and row pitch must be aligned to min(8, the largest power
+    // of two dividing its pixel size in bytes), as required by packed-vector stores.
+    DIRECTX_TEX_API HRESULT __cdecl Decompress(_In_ const Image& cImage, _In_ const Image& destination) noexcept;
     DIRECTX_TEX_API HRESULT __cdecl Decompress(
         _In_reads_(nimages) const Image* cImages, _In_ size_t nimages, _In_ const TexMetadata& metadata,
         _In_ DXGI_FORMAT format, _Out_ ScratchImage& images) noexcept;

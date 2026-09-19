@@ -977,3 +977,40 @@ HRESULT DirectX::Decompress(
 
     return S_OK;
 }
+
+// libdds: validate the external buffer boundary once, then reuse the upstream decoder.
+HRESULT DirectX::Decompress(const Image& source, const Image& destination) noexcept
+{
+    if (!source.pixels || !destination.pixels)
+        return E_POINTER;
+    if (!source.width || !source.height || source.width != destination.width || source.height != destination.height
+        || !IsCompressed(source.format) || !IsValid(destination.format) || IsCompressed(destination.format))
+        return E_INVALIDARG;
+    if (IsTypeless(destination.format) || IsPlanar(destination.format) || IsPalettized(destination.format)
+        || IsPacked(destination.format) || BitsPerPixel(destination.format) < 8)
+        return HRESULT_E_NOT_SUPPORTED;
+
+    // Packed stores require their natural alignment. Twelve-byte RGB floats need
+    // four-byte alignment; eight-byte packed pixels can require eight bytes.
+    const size_t pixelBytes = BitsPerPixel(destination.format) / 8;
+    const size_t alignment = std::min<size_t>(8, pixelBytes & (~pixelBytes + 1));
+    if ((reinterpret_cast<uintptr_t>(destination.pixels) % alignment) || (destination.rowPitch % alignment))
+        return E_INVALIDARG;
+
+    for (const Image* img : { &source, &destination })
+    {
+        size_t rowPitch = 0, slicePitch = 0;
+        HRESULT hr = ComputePitch(img->format, img->width, img->height, rowPitch, slicePitch);
+        if (FAILED(hr))
+            return hr;
+        const size_t rows = ComputeScanlines(img->format, img->height);
+        if (!rows || img->rowPitch < rowPitch || img->rowPitch > SIZE_MAX / rows
+            || img->slicePitch < img->rowPitch * rows)
+            return E_INVALIDARG;
+    }
+    const auto src = reinterpret_cast<uintptr_t>(source.pixels);
+    const auto dst = reinterpret_cast<uintptr_t>(destination.pixels);
+    if ((src <= dst && dst - src < source.slicePitch) || (dst <= src && src - dst < destination.slicePitch))
+        return E_INVALIDARG;
+    return DecompressBC(source, destination);
+}

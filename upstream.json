@@ -1,0 +1,29 @@
+{
+  "repository": "https://github.com/microsoft/DirectXTex",
+  "revision": "868198cb4bcbc4e359372e7ba38d7a6dda3a6afa",
+  "hash_normalization": "UTF-8 source with LF line endings",
+  "files": {
+    "BC.cpp": "dc61d119d031e5fc2a20935e3661999f853adac6be55b60fc60bab0930aed1ec",
+    "BC.h": "ebfad6ada75845d31f3978a47476605fe84060cc671a1a094c6b869551a6a100",
+    "BC4BC5.cpp": "cf0bbd4c57e1ed890eab31cf3141f89345538082ea0a70c68c481ba1f9d7d3b3",
+    "BC6HBC7.cpp": "6205e7ac2c5b8fe0a6438e3428c3f58dcd3897c23adae6442655afde630db88b",
+    "DDS.h": "ea024fd2d9885af8779aedc477054539a1af8d2e4c08ad574be61ca7af7af679",
+    "DirectXTex.h": "b773b1ec480b3ae6a9b3bf6c64ccd9bbd94944d70e82a0da33da21ceafb33a87",
+    "DirectXTex.inl": "a12883f7aa0c2f3a2c7b18754badcffed227e035996a66a38cddd224d00969bb",
+    "DirectXTexCompress.cpp": "791c632e30c9e8ebefd53181a05599910096e35e24a2709b223a2b5f45d9488e",
+    "DirectXTexConvert.cpp": "f744e81e8a6dd2d926270ab8d3872d4f859e48c2cf5b3666b1a9bb3ba8097f0c",
+    "DirectXTexDDS.cpp": "b44fa6f400c289ea40881fbafd34b89d6305a94f504561661198b9d239515739",
+    "DirectXTexHDR.cpp": "4b0098bae181fee32aeb5500ef848755ddf1b2d2d16b6a127a2db87797ec4610",
+    "DirectXTexImage.cpp": "42ec60847c5318149d5018a026e95f1aa4bd570b9ba1b9b16ed6bb033d3239e3",
+    "DirectXTexMipmaps.cpp": "0056c74236d9d326c018fe5b8cd23c78dae81781572d027e45cbf988c8ff4d27",
+    "DirectXTexMisc.cpp": "22050114472012d7e85f90ebd5c8357894670536ce78ffa29b9ac9645dd26822",
+    "DirectXTexNormalMaps.cpp": "c30ae318d9d1797d56e805d775e0ffb097e6cdb769517df498f4b982b4e83eaa",
+    "DirectXTexP.h": "9100a48810bfd6ccf80a81234edf5f317c0cfb9e31a535af107aab5952a47b54",
+    "DirectXTexPMAlpha.cpp": "b778548a378f4b6ebc8129b4230328acd7884e6e827cde08cbea98c7f5549a37",
+    "DirectXTexResize.cpp": "97b1fa58e90f963b040f86c527b6d66344848f5ec960c0e2d0f9c9e5fc06da8a",
+    "DirectXTexTGA.cpp": "f265194edd0b14d65959a38f33bf8951d7fb83511133e02b024827c6d4ba07db",
+    "DirectXTexUtil.cpp": "93aed9b26a3c55f3706565ebfb73169888d381576b5d80d356edbfb4840f2890",
+    "filters.h": "d8f2de4826d9c5d0b30ab9f866b9e77539a8642b4758e9b46bb182a634e1422a",
+    "scoped.h": "f2e9b6e06f7041af4eba5bffbcf77334560fe9aec999dfe4ceb4fe2f16aa4e1c"
+  }
+}

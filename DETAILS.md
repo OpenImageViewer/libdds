@@ -1,5 +1,11 @@
 # Where libdds gains performance
 
+The performance work targets two costs around DirectXTex's CPU algorithms: moving
+pixels between allocations and repeating decisions inside pixel loops. The changes
+remove that work while reusing existing decoding and conversion arithmetic. The
+[README](README.md#performance-against-directxtex-211) contains the measured gains.
+This document explains how the commits produce them.
+
 ## Avoid moving the same pixels twice
 
 An application may already hold both the DDS bytes and its final output buffer.
@@ -49,3 +55,18 @@ These changes affect different workloads differently. Native images benefit main
 from avoided allocation and copying. Compressed images also benefit from reduced
 setup, packing and interpolation work, but still pay for decoding and writing every
 output pixel. Their combined speedups cannot be attributed to any one commit.
+
+## Verify that work disappeared and pixels stayed correct
+
+The [development profiles](VALIDATION.md#shared-scanline-optimization) record the
+disappearance of per-block format-table searches. Later
+[borrowed-view profiles](VALIDATION.md#bc4bc5-palette-and-dds-view-follow-up) show the
+owning input allocation/copy path disappearing for the measured array workload.
+These observations support the implementation's intended savings. The end-to-end
+benchmarks measure the combined effect.
+
+The [tests](Tests/Tests.cpp) compare borrowed and owning paths, check padded outputs
+and guards, and exercise rounding, transfer functions and partial blocks. Exhaustive
+BC4/BC5 endpoint/index cases feed upstream comparisons. The commit notes report
+SIMD/scalar CPU and upstream-parity validation. Execution records and platform
+limits remain in [VALIDATION.md](VALIDATION.md).

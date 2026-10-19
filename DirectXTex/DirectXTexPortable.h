@@ -16,6 +16,11 @@
         #define WIN32_LEAN_AND_MEAN
     #endif
     #include <Windows.h>
+    #ifdef __MINGW32__
+        // MinGW's self-assignment macro rejects const references in the CPU-only stubs.
+        #undef UNREFERENCED_PARAMETER
+        #define UNREFERENCED_PARAMETER(value) static_cast<void>(value)
+    #endif
 #else
     #define PAL_STDCPP_COMPAT
     #include <sal.h>
